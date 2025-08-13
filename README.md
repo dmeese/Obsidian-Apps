@@ -9,6 +9,10 @@ This project contains a Python script, `ObsidianAnalyzer.py`, that analyzes the 
 - Builds a complete graph of all notes and their `[[wikilinks]]`.
 - Generates a report identifying:
   - **Orphan Notes**: Notes that have no incoming links.
+  - **Hub Notes**: Highly-connected notes that serve as entry points to topics.
+  - **Dead-End Notes**: Notes that have incoming links but no outbound links.
+  - **Low-Density Notes**: Notes that may be information silos, with few links for their size.
+  - **Untapped Potential**: Unlinked mentions of other note titles.
   - **Stub Links**: Links that point to notes that do not yet exist.
 
 ## Setup
