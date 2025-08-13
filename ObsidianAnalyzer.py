@@ -1,28 +1,64 @@
 import sys
 import os
+import argparse
+import logging
 import re
+import subprocess
 import requests
+import urllib.parse
+from collections import defaultdict
 import networkx as nx
 from dotenv import load_dotenv
 from typing import List, Tuple, Dict, Any
 
 WIKILINK_RE = re.compile(r"\[\[([^|\]]+)")
 TIMEOUT_SECONDS = 10
+HUB_THRESHOLD = 10  # Min outbound links to be considered a hub
 
 
 def load_config() -> Tuple[str, str]:
-    """Loads API configuration from .env file and exits if not found."""
-    load_dotenv()
-    api_url = os.getenv("OBSIDIAN_API_URL")
-    api_key = os.getenv("OBSIDIAN_API_KEY")
+    """Loads configuration and fetches the API key from 1Password."""
+    # Look for the .env file inside the .vscode directory
+    project_root = os.path.dirname(__file__)
+    dotenv_path = os.path.join(project_root, ".vscode", ".env")
 
-    if not api_url or not api_key:
-        print(
-            "Error: OBSIDIAN_API_URL and OBSIDIAN_API_KEY must be set in your .env file.",
-            file=sys.stderr,
+    if not os.path.exists(dotenv_path):
+        logging.error(f"Configuration file not found at '{dotenv_path}'")
+        sys.exit(1)
+
+    load_dotenv(dotenv_path=dotenv_path)
+
+    api_url = os.getenv("OBSIDIAN_API_URL")
+    api_key_ref = os.getenv("OBSIDIAN_API_KEY_REF")
+
+    if not all([api_url, api_key_ref]):
+        logging.error(
+            "OBSIDIAN_API_URL and OBSIDIAN_API_KEY_REF must be set in your .vscode/.env file."
         )
         sys.exit(1)
+
+    api_key = fetch_api_key_from_1password(api_key_ref)
     return api_url, api_key
+
+
+def fetch_api_key_from_1password(secret_reference: str) -> str:
+    """Fetches a secret from 1Password using the op CLI."""
+    try:
+        result = subprocess.run(
+            ["op", "read", secret_reference],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip()
+    except FileNotFoundError:
+        logging.error(
+            "1Password CLI ('op') not found. Please install it from https://developer.1password.com/docs/cli/"
+        )
+        sys.exit(1)
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Error fetching secret from 1Password:\n{e.stderr}")
+        sys.exit(1)
 
 
 def create_api_session(api_key: str) -> requests.Session:
@@ -35,104 +71,153 @@ def create_api_session(api_key: str) -> requests.Session:
 def verify_connection(session: requests.Session, api_url: str) -> None:
     """Verifies connection to the Obsidian API and prints vault info."""
     try:
-        print(f"Connecting to Obsidian API at {api_url}...")
+        logging.info(f"Connecting to Obsidian API at {api_url}...")
         response = session.get(api_url, timeout=TIMEOUT_SECONDS)
-        response.raise_for_status()  # Raises an HTTPError for bad responses
+        response.raise_for_status()
 
-        vault_info = response.json()
-        print(f"Successfully connected to vault: '{vault_info.get('name')}'")
-        print(
-            f"Obsidian version: {vault_info.get('obsidianVersion')}, "
-            f"API version: {vault_info.get('version')}"
-        )
+        try:
+            api_info = response.json()
+            # Check for the structure of newer API versions
+            if not ("service" in api_info and "versions" in api_info):
+                raise ValueError("Missing expected keys in API response.")
+
+            service_name = api_info.get("service")
+            obsidian_version = api_info.get("versions", {}).get("obsidian")
+            api_version = api_info.get("versions", {}).get("self")
+
+            if not all([service_name, obsidian_version, api_version]):
+                raise ValueError("Incomplete version/manifest info in API response.")
+
+            logging.info(f"Successfully connected to service: '{service_name}'")
+            logging.info(f"Obsidian v{obsidian_version}, API v{api_version}")
+
+        except (requests.exceptions.JSONDecodeError, ValueError):
+            logging.error("The API response from the root endpoint was not in the expected format.")
+            logging.error("Please ensure the Obsidian Local REST API plugin is up-to-date and enabled correctly.")
+            logging.error(f"Received response body: {response.text}")
+            sys.exit(1)
     except requests.exceptions.RequestException as e:
-        print(f"Error connecting to the Obsidian API: {e}", file=sys.stderr)
-        print(
-            "Please ensure Obsidian is running and the Local REST API plugin is enabled.",
-            file=sys.stderr,
-        )
+        logging.error(f"Error during vault connection: {e}")
+        logging.error("Please ensure Obsidian is running and the Local REST API plugin is enabled.")
         sys.exit(1)
 
 
 def fetch_all_notes(session: requests.Session, api_url: str) -> List[str]:
-    """Fetches a list of all markdown files from the vault."""
-    print("\nFetching all notes from the vault...")
-    try:
-        notes_response = session.get(f"{api_url}/vault/", timeout=TIMEOUT_SECONDS)
-        notes_response.raise_for_status()
-        all_files = notes_response.json().get("files", [])
+    """Fetches a list of all markdown files by recursively traversing the vault."""
+    logging.info("Fetching all notes by recursively traversing the vault...")
 
-        markdown_files = [path for path in all_files if path.endswith(".md")]
-        if not markdown_files:
-            print("No markdown notes found in the vault.")
-            sys.exit(0)
+    all_markdown_files: set[str] = set()
+    # The queue will store directory paths WITHOUT trailing slashes.
+    # The root is represented by an empty string.
+    dirs_to_scan: list[str] = [""]
+    scanned_dirs: set[str] = set()
 
-        print(f"Found {len(markdown_files)} markdown notes.")
-        return markdown_files
-    except requests.exceptions.RequestException as e:
-        print(f"Error fetching notes: {e}", file=sys.stderr)
-        sys.exit(1)
-    except (KeyError, TypeError):
-        print(
-            "Error: Unexpected response format from API when fetching notes.",
-            file=sys.stderr,
-        )
-        print(
-            "Expected a JSON object with a 'files' key containing a list.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    while dirs_to_scan:
+        current_dir_no_slash = dirs_to_scan.pop(0)
+        if current_dir_no_slash in scanned_dirs:
+            continue
+        scanned_dirs.add(current_dir_no_slash)
+
+        logging.debug(f"Scanning directory: '{current_dir_no_slash if current_dir_no_slash else '/'}'")
+        try:
+            encoded_path = urllib.parse.quote(current_dir_no_slash)
+
+            # For subdirectories, the API endpoint needs a trailing slash.
+            # The root endpoint is just /vault/
+            if encoded_path:
+                list_url = f"{api_url}/vault/{encoded_path}/"
+            else:
+                list_url = f"{api_url}/vault/"
+
+            response = session.get(list_url, timeout=TIMEOUT_SECONDS)
+            response.raise_for_status()
+            contents = response.json()
+            items = contents.get("files", [])
+
+            for item_path in items:
+                # The API returns paths relative to the directory being scanned.
+                # We must join them to build the full path from the vault root.
+                full_item_path = os.path.join(current_dir_no_slash, item_path).replace("\\", "/")
+
+                if full_item_path.endswith("/"):
+                    dirs_to_scan.append(full_item_path.rstrip('/'))
+                elif full_item_path.endswith(".md"):
+                    all_markdown_files.add(full_item_path)
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Error fetching contents of directory '{current_dir_no_slash}/': {e}")
+            continue
+
+    if not all_markdown_files:
+        logging.warning("No markdown notes found in the vault.")
+        sys.exit(0)
+
+    final_list = sorted(list(all_markdown_files))
+    logging.info(f"Found {len(final_list)} markdown notes.")
+    logging.debug(f"Full list of markdown files found: {final_list}")
+    return final_list
 
 
 def build_note_graph(
     session: requests.Session, api_url: str, markdown_files: List[str]
 ) -> nx.DiGraph:
     """Builds a directed graph of notes and their links."""
-    print("Building note graph (this may take a moment)...")
+    logging.info(f"Building note graph for {len(markdown_files)} files...")
     graph = nx.DiGraph()
-    note_basenames: Dict[str, str] = {}  # Map basenames (without .md) to full paths
+
+    # Map from full link path (e.g., "Folder/Note") to full file path ("Folder/Note.md")
+    full_path_map: Dict[str, str] = {}
+    # Map from basename (e.g., "Note") to a list of possible full file paths
+    basename_map: Dict[str, List[str]] = defaultdict(list)
 
     for note_path in markdown_files:
-        basename = os.path.splitext(os.path.basename(note_path))[0]
         graph.add_node(note_path, type="note")
-        note_basenames[basename] = note_path
+
+        link_path = os.path.splitext(note_path)[0]
+        full_path_map[link_path] = note_path
+
+        basename = os.path.splitext(os.path.basename(note_path))[0]
+        basename_map[basename].append(note_path)
 
     for i, note_path in enumerate(markdown_files):
-        print(
-            f"  Processing note {i + 1}/{len(markdown_files)}: {os.path.basename(note_path)}...",
-            end="\r",
-            flush=True,
-        )
+        logging.debug(f"Processing note {i + 1}/{len(markdown_files)}: {note_path}")
         try:
+            # Per API docs, use the /vault/{filename} endpoint to get note content.
+            encoded_note_path = urllib.parse.quote(note_path)
             note_content_response = session.get(
-                f"{api_url}/vault/{note_path}",
+                f"{api_url}/vault/{encoded_note_path}",
                 headers={"Accept": "text/markdown"},
                 timeout=TIMEOUT_SECONDS,
             )
             note_content_response.raise_for_status()
             content = note_content_response.text
 
-            for link_basename in WIKILINK_RE.findall(content):
-                target_path = note_basenames.get(link_basename)
+            for link_target in WIKILINK_RE.findall(content):
+                target_path = None
+                # 1. Try to resolve as a full path (e.g., "Folder/My Note")
+                if link_target in full_path_map:
+                    target_path = full_path_map[link_target]
+                # 2. If not, try as a basename. If multiple notes share a name,
+                # this will pick the first one found, which is a reasonable default.
+                elif link_target in basename_map:
+                    target_path = basename_map[link_target][0]
+
                 if target_path:
                     graph.add_edge(note_path, target_path)
                 else:
                     # Link to a non-existent note (a stub)
-                    if not graph.has_node(link_basename):
-                        graph.add_node(link_basename, type="stub")
-                    graph.add_edge(note_path, link_basename)
+                    if not graph.has_node(link_target):
+                        graph.add_node(link_target, type="stub")
+                    graph.add_edge(note_path, link_target)
         except requests.exceptions.RequestException as e:
-            print(" " * 80, end="\r")  # Clear the line
-            print(f"\nWarning: Could not fetch content for '{note_path}': {e}")
+            logging.warning(f"Could not fetch content for '{note_path}': {e}")
 
-    print(" " * 80, end="\r")  # Clear the final progress line
-    print("Graph construction complete.")
+    logging.info("Graph construction complete.")
     return graph
 
 
 def analyze_graph(graph: nx.DiGraph) -> Dict[str, Any]:
     """Analyzes the graph to find orphans, stubs, and their sources."""
-    print("Analyzing note graph...")
+    logging.info("Analyzing note graph...")
     all_nodes = list(graph.nodes(data=True))
     notes = [n for n, d in all_nodes if d.get("type") == "note"]
     stubs = [n for n, d in all_nodes if d.get("type") == "stub"]
@@ -140,14 +225,23 @@ def analyze_graph(graph: nx.DiGraph) -> Dict[str, Any]:
     in_degrees = graph.in_degree(notes)
     orphans = [node for node, degree in in_degrees if degree == 0]
 
-    stub_sources: Dict[str, List[str]] = {}
-    for stub_name in stubs:
-        stub_sources[stub_name] = sorted(list(graph.predecessors(stub_name)))
+    out_degrees = graph.out_degree(notes)
+    hubs = [node for node, degree in out_degrees if degree >= HUB_THRESHOLD]
+    dead_ends = [
+        node for node, degree in out_degrees if degree == 0 and graph.in_degree(node) > 0
+    ]
+
+    stub_sources = {
+        stub_name: sorted(list(graph.predecessors(stub_name)))
+        for stub_name in stubs
+    }
 
     return {
         "total_notes": len(notes),
         "total_links": graph.number_of_edges(),
         "orphans": sorted(orphans),
+        "hubs": sorted(hubs),
+        "dead_ends": sorted(dead_ends),
         "stubs": sorted(stubs),
         "stub_sources": stub_sources,
     }
@@ -164,6 +258,14 @@ def print_report(analysis: Dict[str, Any]) -> None:
     print(f"Orphan Notes ({len(orphans)}):")
     print("\n".join(f"  - {n}" for n in orphans) if orphans else "  None found.")
 
+    hubs = analysis["hubs"]
+    print(f"\nHub Notes (>{HUB_THRESHOLD-1} outbound links) ({len(hubs)}):")
+    print("\n".join(f"  - {n}" for n in hubs) if hubs else "  None found.")
+
+    dead_ends = analysis["dead_ends"]
+    print(f"\nDead-End Notes (has links in, but no links out) ({len(dead_ends)}):")
+    print("\n".join(f"  - {n}" for n in dead_ends) if dead_ends else "  None found.")
+
     stubs = analysis["stubs"]
     stub_sources = analysis["stub_sources"]
     print(f"\nStub Links (to non-existent notes) ({len(stubs)}):")
@@ -179,6 +281,24 @@ def print_report(analysis: Dict[str, Any]) -> None:
 
 def main() -> None:
     """Main function to orchestrate the vault analysis."""
+    parser = argparse.ArgumentParser(
+        description="Analyze an Obsidian vault for orphans and stubs."
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Enable verbose (DEBUG) logging output.",
+    )
+    args = parser.parse_args()
+
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        stream=sys.stderr,
+    )
+
     api_url, api_key = load_config()
     session = create_api_session(api_key)
 
