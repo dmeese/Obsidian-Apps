@@ -48,11 +48,12 @@ The `ingest` feature requires an API key for the Google Gemini LLM.
 
 You must have the "Local REST API" community plugin installed and enabled in Obsidian.
 
-### 5. Storing the API Key in 1Password
+### 5. Storing API Keys in 1Password
 
-1.  In your 1Password vault, create a new item (e.g., an "API Credential" or "Login").
-2.  Save your Obsidian Local REST API key in a field within this item.
-3.  Right-click on the secret field and select **Copy Secret Reference**. This will copy a URI that looks like `op://<vault>/<item>/<field>`.
+This process should be followed for both your Obsidian API Key and your Gemini API Key.
+1.  In your 1Password vault, create a new item for your secret (e.g., an "API Credential" or "Login").
+2.  Save the API key in a field within this item.
+3.  Right-click on the secret's field and select **Copy Secret Reference**. This will copy a URI that looks like `op://<vault>/<item>/<field>`.
 
 ### 6. Environment Configuration
 
