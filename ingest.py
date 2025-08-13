@@ -122,6 +122,7 @@ def run_ingest_process(
     api_url: str,
     gemini_api_key: str,
     timeout: int,
+    delete_after_ingest: bool = True,
 ):
     """Orchestrates the file ingestion and note creation process."""
     # Configure the Gemini API and create the model once.
@@ -132,9 +133,45 @@ def run_ingest_process(
         logging.error(f"Ingest folder not found: {ingest_folder}")
         sys.exit(1)
 
+    processed_files = []
+    failed_files = []
+
     for filename in os.listdir(ingest_folder):
         file_path = os.path.join(ingest_folder, filename)
         if os.path.isfile(file_path):
-            content = read_file_content(file_path)
-            decomposed_notes = analyze_with_gemini(model, content)
-            create_notes_in_vault(session, api_url, decomposed_notes, notes_folder, timeout)
+            try:
+                logging.info(f"Processing file: {filename}")
+                content = read_file_content(file_path)
+                if not content:
+                    logging.warning(f"Skipping {filename} due to empty content")
+                    failed_files.append(file_path)
+                    continue
+                
+                decomposed_notes = analyze_with_gemini(model, content)
+                if decomposed_notes:
+                    create_notes_in_vault(session, api_url, decomposed_notes, notes_folder, timeout)
+                    processed_files.append(file_path)
+                    logging.info(f"Successfully processed {filename}")
+                else:
+                    logging.warning(f"No notes generated from {filename}")
+                    failed_files.append(file_path)
+            except Exception as e:
+                logging.error(f"Failed to process {filename}: {e}")
+                failed_files.append(file_path)
+
+    # Delete successfully processed files if requested
+    if delete_after_ingest and processed_files:
+        logging.info(f"Deleting {len(processed_files)} successfully processed files...")
+        for file_path in processed_files:
+            try:
+                os.remove(file_path)
+                logging.debug(f"Deleted: {file_path}")
+            except OSError as e:
+                logging.error(f"Failed to delete {file_path}: {e}")
+        
+        logging.info(f"Successfully deleted {len(processed_files)} files from ingest folder")
+    
+    if failed_files:
+        logging.warning(f"{len(failed_files)} files failed processing and were not deleted")
+        for file_path in failed_files:
+            logging.debug(f"Failed file: {file_path}")

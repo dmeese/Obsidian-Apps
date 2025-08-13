@@ -84,3 +84,17 @@ python ObsidianAnalyzer.py analyze
 ```
 
 Or, if you are using VS Code, simply open the project and press `F5` to run the debugger.
+
+### Ingest Mode
+
+To process documents and create new notes:
+
+```bash
+python ObsidianAnalyzer.py ingest
+```
+
+**Note:** By default, files in the ingest folder are automatically deleted after successful processing. Use the `--keep-files` flag to preserve original files:
+
+```bash
+python ObsidianAnalyzer.py ingest --keep-files
+```

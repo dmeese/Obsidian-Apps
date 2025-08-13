@@ -57,6 +57,9 @@ def main() -> None:
     parser_ingest.add_argument(
         "--notes-folder", type=str, help="Obsidian vault folder to save new notes. Overrides .env setting."
     )
+    parser_ingest.add_argument(
+        "--keep-files", action="store_true", help="Keep original files in ingest folder after processing. Default: files are deleted."
+    )
 
     args = parser.parse_args()
 
@@ -86,6 +89,8 @@ def main() -> None:
     elif args.command == "ingest":
         # Set the output folder for new notes, preferring the command-line arg
         notes_folder = args.notes_folder if args.notes_folder else default_notes_folder
+        # Delete files after ingestion unless --keep-files flag is set
+        delete_after_ingest = not args.keep_files
         run_ingest_process(
             args.ingest_folder,
             notes_folder,
@@ -93,6 +98,7 @@ def main() -> None:
             api_url,
             gemini_api_key,
             TIMEOUT_SECONDS,
+            delete_after_ingest,
         )
 
 
