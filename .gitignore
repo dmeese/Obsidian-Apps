@@ -104,5 +104,8 @@ env/
 # VSCode
 .vscode/
 
+# Ingest folder for source documents
+ingest/
+
 # PyCharm
 .idea/

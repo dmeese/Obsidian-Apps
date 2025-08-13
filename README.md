@@ -1,6 +1,9 @@
 # Obsidian Tools
 
-This project contains a Python script, `ObsidianAnalyzer.py`, that analyzes the structure of an Obsidian vault to help with knowledge base maintenance.
+This project contains a Python script, `ObsidianAnalyzer.py`, that helps you manage and grow your Obsidian vault. It has two primary modes:
+
+-   **Analyze Mode**: Analyzes the structure of your vault to find linking opportunities and structural issues.
+-   **Ingest Mode**: Uses a Gemini LLM to read documents (`.txt`, `.pdf`) and automatically decompose them into atomic, Zettelkasten-style notes.
 
 ## Features
 
@@ -35,34 +38,48 @@ This tool uses the [1Password CLI](https://developer.1password.com/docs/cli/get-
 
 You can test your setup by running `op account list`.
 
-### 3. Obsidian Local REST API Plugin
+### 3. Gemini API Key
+
+The `ingest` feature requires an API key for the Google Gemini LLM.
+1.  Obtain an API key from Google AI Studio.
+2.  Store this key securely in 1Password, just like your Obsidian API key.
+
+### 4. Obsidian Local REST API Plugin
 
 You must have the "Local REST API" community plugin installed and enabled in Obsidian.
 
-### 4. Storing the API Key in 1Password
+### 5. Storing the API Key in 1Password
 
 1.  In your 1Password vault, create a new item (e.g., an "API Credential" or "Login").
 2.  Save your Obsidian Local REST API key in a field within this item.
 3.  Right-click on the secret field and select **Copy Secret Reference**. This will copy a URI that looks like `op://<vault>/<item>/<field>`.
 
-### 5. Environment Configuration
+### 6. Environment Configuration
 
 The script requires a `.env` file located inside the `.vscode` directory. This file is ignored by Git.
 
 1.  Create a file named `.env` inside the `.vscode` folder.
 2.  Add the following content, pasting the Secret Reference you copied from 1Password:
 
-    ```
+    ```.env
     OBSIDIAN_API_URL="http://127.0.0.1:27123"
     OBSIDIAN_API_KEY_REF="op://your-vault/your-item/your-secret-field"
+    GEMINI_API_KEY_REF="op://your-vault/your-gemini-item/your-secret-field"
+
+    # Default folder for new notes created by the ingest process
+    NEW_NOTES_FOLDER="Inbox/Generated"
     ```
 
 ## Usage
 
-Once setup is complete, you can run the analyzer from your terminal:
+The script operates in two modes: `analyze` and `ingest`.
+
+### Analyze Mode
+
+To run the existing vault analysis:
 
 ```bash
-python ObsidianAnalyzer.py
+python ObsidianAnalyzer.py analyze
 ```
 
 Or, if you are using VS Code, simply open the project and press `F5` to run the debugger.
