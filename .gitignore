@@ -98,10 +98,7 @@ env/
 *.sublime-workspace
 
 # VSCode
-# Ignore user-specific VSCode settings and sensitive files
-.vscode/*
-!.vscode/settings.json
-!.vscode/launch.json
+.vscode/
 
 # PyCharm
 .idea/
