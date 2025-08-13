@@ -238,11 +238,12 @@ def analyze_graph(
     untapped_potential: Dict[str, List[str]] = defaultdict(list)
     all_titles = {os.path.splitext(os.path.basename(n))[0] for n in notes}
 
-    # Build the Aho-Corasick automaton once with all possible titles
+    # Build the Aho-Corasick automaton for case-insensitive matching.
+    # We store the lowercase title as the key and the canonical title as the value.
     auto = ahocorasick.Automaton()
-    for title in all_titles:
-        # Store the canonical title as the value for the keyword
-        auto.add_word(title, title)
+    lower_to_canonical_map = {title.lower(): title for title in all_titles}
+    for lower_title, canonical_title in lower_to_canonical_map.items():
+        auto.add_word(lower_title, canonical_title)
     auto.make_automaton()
 
     for source_note_path in notes:
@@ -250,8 +251,9 @@ def analyze_graph(
         if not source_content:
             continue
 
-        # Find all titles mentioned in the current note's content
-        found_titles = {value for end_index, value in auto.iter(source_content, case_insensitive=True)}
+        # Find all titles mentioned by searching the lowercased content.
+        # The automaton will yield the original, canonical title.
+        found_titles = {value for end_index, value in auto.iter(source_content.lower())}
 
         # Determine which of the found titles are potential new links
         existing_link_titles = {os.path.splitext(os.path.basename(target))[0] for target in graph.successors(source_note_path)}
@@ -267,7 +269,7 @@ def analyze_graph(
     for note_path in notes:
         word_count = len(graph.nodes[note_path].get('content', '').split())
         if word_count >= min_word_count:
-            if (graph.out_degree(note_path) / word_count) < link_density_threshold:
+            if word_count > 0 and (graph.out_degree(note_path) / word_count) < link_density_threshold:
                 low_density_notes.append(note_path)
 
     stub_sources = {
