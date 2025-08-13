@@ -7,13 +7,13 @@ import subprocess
 import requests
 import urllib.parse
 from collections import defaultdict
+import ahocorasick
 import networkx as nx
 from dotenv import load_dotenv
 from typing import List, Tuple, Dict, Any
 
 WIKILINK_RE = re.compile(r"\[\[([^|\]]+)")
 TIMEOUT_SECONDS = 10
-HUB_THRESHOLD = 10  # Min outbound links to be considered a hub
 
 
 def load_config() -> Tuple[str, str]:
@@ -190,6 +190,7 @@ def build_note_graph(
             )
             note_content_response.raise_for_status()
             content = note_content_response.text
+            graph.nodes[note_path]['content'] = content
 
             for link_target in WIKILINK_RE.findall(content):
                 target_path = None
@@ -215,7 +216,9 @@ def build_note_graph(
     return graph
 
 
-def analyze_graph(graph: nx.DiGraph) -> Dict[str, Any]:
+def analyze_graph(
+    graph: nx.DiGraph, hub_threshold: int, link_density_threshold: float, min_word_count: int
+) -> Dict[str, Any]:
     """Analyzes the graph to find orphans, stubs, and their sources."""
     logging.info("Analyzing note graph...")
     all_nodes = list(graph.nodes(data=True))
@@ -226,10 +229,46 @@ def analyze_graph(graph: nx.DiGraph) -> Dict[str, Any]:
     orphans = [node for node, degree in in_degrees if degree == 0]
 
     out_degrees = graph.out_degree(notes)
-    hubs = [node for node, degree in out_degrees if degree >= HUB_THRESHOLD]
+    hubs = [node for node, degree in out_degrees if degree >= hub_threshold]
     dead_ends = [
         node for node, degree in out_degrees if degree == 0 and graph.in_degree(node) > 0
     ]
+
+    # --- Untapped Potential Analysis (Aho-Corasick) ---
+    untapped_potential: Dict[str, List[str]] = defaultdict(list)
+    all_titles = {os.path.splitext(os.path.basename(n))[0] for n in notes}
+
+    # Build the Aho-Corasick automaton once with all possible titles
+    auto = ahocorasick.Automaton()
+    for title in all_titles:
+        # Store the canonical title as the value for the keyword
+        auto.add_word(title, title)
+    auto.make_automaton()
+
+    for source_note_path in notes:
+        source_content = graph.nodes[source_note_path].get('content', '')
+        if not source_content:
+            continue
+
+        # Find all titles mentioned in the current note's content
+        found_titles = {value for end_index, value in auto.iter(source_content, case_insensitive=True)}
+
+        # Determine which of the found titles are potential new links
+        existing_link_titles = {os.path.splitext(os.path.basename(target))[0] for target in graph.successors(source_note_path)}
+        source_title = os.path.splitext(os.path.basename(source_note_path))[0]
+        
+        potential_new_links = found_titles - existing_link_titles - {source_title}
+
+        if potential_new_links:
+            untapped_potential[source_note_path] = sorted(list(potential_new_links))
+
+    # --- Low Link Density Analysis ---
+    low_density_notes = []
+    for note_path in notes:
+        word_count = len(graph.nodes[note_path].get('content', '').split())
+        if word_count >= min_word_count:
+            if (graph.out_degree(note_path) / word_count) < link_density_threshold:
+                low_density_notes.append(note_path)
 
     stub_sources = {
         stub_name: sorted(list(graph.predecessors(stub_name)))
@@ -242,41 +281,71 @@ def analyze_graph(graph: nx.DiGraph) -> Dict[str, Any]:
         "orphans": sorted(orphans),
         "hubs": sorted(hubs),
         "dead_ends": sorted(dead_ends),
+        "low_density_notes": sorted(low_density_notes),
+        "untapped_potential": untapped_potential,
         "stubs": sorted(stubs),
         "stub_sources": stub_sources,
     }
 
 
-def print_report(analysis: Dict[str, Any]) -> None:
-    """Prints the final analysis report to the console."""
-    print("\n--- Obsidian Vault Analysis Report ---")
-    print(f"Total Notes: {analysis['total_notes']}")
-    print(f"Total Links Found: {analysis['total_links']}")
-    print("-" * 35)
+def print_report(
+    analysis: Dict[str, Any], hub_threshold: int, output_stream=sys.stdout
+) -> None:
+    """Prints the final analysis report to the console or a file."""
+
+    def write_line(text: str = ""):
+        output_stream.write(text + "\n")
+
+    write_line("# Obsidian Vault Analysis Report")
+    write_line()
+    write_line(f"**Total Notes:** {analysis['total_notes']}")
+    write_line(f"**Total Links Found:** {analysis['total_links']}")
+    write_line()
+    write_line("---")
 
     orphans = analysis["orphans"]
-    print(f"Orphan Notes ({len(orphans)}):")
-    print("\n".join(f"  - {n}" for n in orphans) if orphans else "  None found.")
+    write_line()
+    write_line(f"## Orphan Notes ({len(orphans)})")
+    print("\n".join(f"- `{n}`" for n in orphans) if orphans else "None found.", file=output_stream)
 
     hubs = analysis["hubs"]
-    print(f"\nHub Notes (>{HUB_THRESHOLD-1} outbound links) ({len(hubs)}):")
-    print("\n".join(f"  - {n}" for n in hubs) if hubs else "  None found.")
+    write_line()
+    write_line(f"## Hub Notes (>{hub_threshold-1} outbound links) ({len(hubs)})")
+    print("\n".join(f"- `{n}`" for n in hubs) if hubs else "None found.", file=output_stream)
 
     dead_ends = analysis["dead_ends"]
-    print(f"\nDead-End Notes (has links in, but no links out) ({len(dead_ends)}):")
-    print("\n".join(f"  - {n}" for n in dead_ends) if dead_ends else "  None found.")
+    write_line()
+    write_line(f"## Dead-End Notes (has links in, but no links out) ({len(dead_ends)})")
+    print("\n".join(f"- `{n}`" for n in dead_ends) if dead_ends else "None found.", file=output_stream)
+
+    low_density_notes = analysis["low_density_notes"]
+    write_line()
+    write_line(f"## Low Link Density Notes (potential info silos) ({len(low_density_notes)})")
+    print("\n".join(f"- `{n}`" for n in low_density_notes) if low_density_notes else "None found.", file=output_stream)
+
+    untapped_potential = analysis["untapped_potential"]
+    write_line()
+    write_line(f"## Untapped Potential (unlinked mentions) ({len(untapped_potential)})")
+    if untapped_potential:
+        for source_note, suggestions in untapped_potential.items():
+            write_line(f"\n- In `{source_note}`, consider linking to:")
+            for suggestion in suggestions:
+                write_line(f"  - `{suggestion}`")
+    else:
+        write_line("None found.")
 
     stubs = analysis["stubs"]
     stub_sources = analysis["stub_sources"]
-    print(f"\nStub Links (to non-existent notes) ({len(stubs)}):")
+    write_line()
+    write_line(f"## Stub Links (to non-existent notes) ({len(stubs)})")
     if stubs:
         for stub_name in stubs:
-            print(f"  - '{stub_name}' is linked from:")
+            write_line(f"\n- `{stub_name}` is linked from:")
             for p in stub_sources.get(stub_name, []):
-                print(f"    - {p}")
+                write_line(f"  - `{p}`")
     else:
-        print("  None found.")
-    print("\n--- End of Report ---")
+        write_line("None found.")
+    write_line("\n---")
 
 
 def main() -> None:
@@ -289,6 +358,30 @@ def main() -> None:
         "--verbose",
         action="store_true",
         help="Enable verbose (DEBUG) logging output.",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        help="Path to the output markdown file. Defaults to recommendations.md.",
+    )
+    parser.add_argument(
+        "--hub-threshold",
+        type=int,
+        default=10,
+        help="Minimum outbound links for a note to be considered a hub. Default: 10.",
+    )
+    parser.add_argument(
+        "--link-density-threshold",
+        type=float,
+        default=0.02,
+        help="Minimum link-to-word ratio to avoid being flagged as low-density. Default: 0.02 (2 links per 100 words).",
+    )
+    parser.add_argument(
+        "--min-word-count",
+        type=int,
+        default=50,
+        help="Minimum word count for a note to be considered for link-density analysis. Default: 50.",
     )
     args = parser.parse_args()
 
@@ -305,8 +398,22 @@ def main() -> None:
     verify_connection(session, api_url)
     markdown_files = fetch_all_notes(session, api_url)
     graph = build_note_graph(session, api_url, markdown_files)
-    analysis = analyze_graph(graph)
-    print_report(analysis)
+    analysis = analyze_graph(
+        graph,
+        hub_threshold=args.hub_threshold,
+        link_density_threshold=args.link_density_threshold,
+        min_word_count=args.min_word_count,
+    )
+
+    output_file = args.output if args.output else "recommendations.md"
+    logging.info(f"Writing report to {output_file}...")
+    try:
+        with open(output_file, "w", encoding="utf-8") as f:
+            print_report(analysis, hub_threshold=args.hub_threshold, output_stream=f)
+        logging.info(f"Report successfully written to {output_file}")
+    except IOError as e:
+        logging.error(f"Could not write report to file {output_file}: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
