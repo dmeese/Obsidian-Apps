@@ -194,6 +194,7 @@ The ingest system uses advanced AI to create interconnected knowledge networks:
 
 #### Automatic Connectivity
 - **Wikilink Generation**: Creates `[[wikilinks]]` between related concepts within the same document
+- **Wikilink Cleaning**: Automatically fixes malformed wikilinks (removes quotes, extra spaces) for Obsidian compatibility
 - **Concept Mapping**: Identifies relationships and automatically links related notes
 - **Knowledge Graph**: Builds a network of interconnected ideas in your vault
 
@@ -290,6 +291,7 @@ The updated ingestion system creates interconnected notes that form knowledge ne
 - **Empty Notes**: Check that source files contain readable text content
 - **LLM Errors**: Verify Gemini API key is valid and has sufficient quota
 - **File Deletion**: Use `--keep-files` flag if you want to preserve source documents
+- **Wikilink Issues**: The system automatically cleans malformed wikilinks, but ensure your LLM prompt is clear about format requirements
 
 ### Getting Help
 

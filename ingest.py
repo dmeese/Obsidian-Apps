@@ -38,6 +38,34 @@ def read_file_content(file_path: str) -> str:
         return ""
 
 
+def clean_wikilinks(content: str) -> str:
+    """
+    Clean wikilinks by removing surrounding quotes and ensuring proper format.
+    Fixes issues like '[[Note Title]]' -> [[Note Title]]
+    """
+    import re
+    
+    # Remove single quotes around wikilinks
+    content = re.sub(r"'\[\[([^\]]+)\]\]'", r'[[\1]]', content)
+    
+    # Remove double quotes around wikilinks
+    content = re.sub(r'"\[\[([^\]]+)\]\]"', r'[[\1]]', content)
+    
+    # Remove backticks around wikilinks
+    content = re.sub(r'`\[\[([^\]]+)\]\]`', r'[[\1]]', content)
+    
+    # Clean up extra spaces in wikilinks - use a more comprehensive approach
+    def clean_spaces_in_wikilink(match):
+        # Extract the content between brackets and strip all whitespace
+        inner_content = match.group(1).strip()
+        return f'[[{inner_content}]]'
+    
+    # Apply the cleaning function to all wikilinks
+    content = re.sub(r'\[\[([^\]]+)\]\]', clean_spaces_in_wikilink, content)
+    
+    return content
+
+
 def analyze_with_gemini(model, text_content: str) -> List[Note]:
     """
     Sends text to Gemini to be decomposed into an interconnected set of
@@ -64,6 +92,7 @@ def analyze_with_gemini(model, text_content: str) -> List[Note]:
     2.  **Connectivity is Key:**
         -   For every note you generate, actively look for concepts that are mentioned in other notes from this same batch.
         -   When you find a connection, embed a markdown wikilink, like `[[Title of the Other Note]]`, directly into the content.
+        -   **CRITICAL: Wikilinks must be in the exact format [[Note Title]] with NO quotes, backticks, or other characters around the brackets.**
         -   The link text MUST EXACTLY match the title of the note you are linking to.
 
     3.  **Note Content:**
@@ -128,6 +157,14 @@ def create_notes_in_vault(
             logging.warning(f"Skipping note with missing title or content: {note}")
             continue
 
+        # Clean wikilinks to remove quotes and ensure proper format
+        original_content = content
+        content = clean_wikilinks(content)
+        
+        # Log if any wikilinks were cleaned
+        if original_content != content:
+            logging.info(f"Cleaned wikilinks in note '{title}'")
+        
         logging.info(f"Creating {note_type} note: {title}")
 
         # Sanitize title to create a valid filename
