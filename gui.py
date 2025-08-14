@@ -67,27 +67,27 @@ class ModernButton(QPushButton):
     
     def _get_font_size(self):
         if self.size == "large":
-            return "16px"
+            return "15px"  # Reduced from 16px
         elif self.size == "small":
-            return "12px"
+            return "11px"  # Reduced from 12px
         else:
-            return "14px"
+            return "13px"  # Reduced from 14px
     
     def _get_padding(self):
         if self.size == "large":
-            return "16px 24px"
+            return "12px 20px"  # Reduced from 16px 24px
         elif self.size == "small":
-            return "8px 16px"
+            return "6px 12px"  # Reduced from 8px 16px
         else:
-            return "12px 20px"
+            return "10px 16px"  # Reduced from 12px 20px
     
     def _get_min_height(self):
         if self.size == "large":
-            return "48px"
+            return "44px"  # Reduced from 48px
         elif self.size == "small":
-            return "32px"
+            return "28px"  # Reduced from 32px
         else:
-            return "40px"
+            return "36px"  # Reduced from 40px
     
     def setup_behavior(self):
         """Setup button behavior and effects."""
@@ -113,8 +113,8 @@ class ModernLineEdit(QLineEdit):
             QLineEdit {
                 border: 2px solid #e5e7eb;
                 border-radius: 8px;
-                padding: 12px 16px;
-                font-size: 14px;
+                padding: 8px 12px;  /* Reduced from 12px 16px */
+                font-size: 13px;  /* Reduced from 14px */
                 background-color: white;
                 color: #111827;
             }
@@ -169,11 +169,11 @@ class ModernSpinBox(QSpinBox):
             QSpinBox {
                 border: 2px solid #e5e7eb;
                 border-radius: 8px;
-                padding: 12px 16px;
-                font-size: 14px;
+                padding: 8px 12px;  /* Reduced from 12px 16px */
+                font-size: 13px;  /* Reduced from 14px */
                 background-color: white;
                 color: #111827;
-                min-height: 20px;
+                min-height: 18px;  /* Reduced from 20px */
             }
             QSpinBox:focus {
                 border-color: #2563eb;
@@ -211,11 +211,11 @@ class ModernDoubleSpinBox(QDoubleSpinBox):
             QDoubleSpinBox {
                 border: 2px solid #e5e7eb;
                 border-radius: 8px;
-                padding: 12px 16px;
-                font-size: 14px;
+                padding: 8px 12px;  /* Reduced from 12px 16px */
+                font-size: 13px;  /* Reduced from 14px */
                 background-color: white;
                 color: #111827;
-                min-height: 20px;
+                min-height: 18px;  /* Reduced from 20px */
             }
             QDoubleSpinBox:focus {
                 border-color: #2563eb;
@@ -282,18 +282,18 @@ class ModernGroupBox(QGroupBox):
         self.setStyleSheet("""
             QGroupBox {
                 font-weight: 600;
-                font-size: 16px;
+                font-size: 14px;  /* Reduced from 16px */
                 color: #111827;
                 border: 2px solid #e5e7eb;
-                border-radius: 12px;
-                margin-top: 16px;
-                padding-top: 16px;
+                border-radius: 10px;  /* Reduced from 12px */
+                margin-top: 12px;  /* Reduced from 16px */
+                padding-top: 12px;  /* Reduced from 16px */
                 background-color: #ffffff;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
-                left: 16px;
-                padding: 0 8px 0 8px;
+                left: 12px;  /* Reduced from 16px */
+                padding: 0 6px 0 6px;  /* Reduced from 8px */
                 background-color: #ffffff;
             }
         """)
@@ -439,10 +439,10 @@ class ObsidianToolsGUI(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # Main layout
+        # Main layout - reduced spacing and margins
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setSpacing(24)
-        main_layout.setContentsMargins(32, 32, 32, 32)
+        main_layout.setSpacing(16)  # Reduced from 24
+        main_layout.setContentsMargins(20, 20, 20, 20)  # Reduced from 32
         
         # Header section
         self.create_header(main_layout)
@@ -461,7 +461,7 @@ class ObsidianToolsGUI(QMainWindow):
             QTabBar::tab {
                 background-color: #f3f4f6;
                 color: #6b7280;
-                padding: 12px 24px;
+                padding: 10px 20px;  /* Reduced from 12px 24px */
                 margin-right: 4px;
                 border-top-left-radius: 8px;
                 border-top-right-radius: 8px;
@@ -495,25 +495,35 @@ class ObsidianToolsGUI(QMainWindow):
             QFrame {
                 background-color: #f8fafc;
                 border-radius: 16px;
-                padding: 24px;
+                padding: 16px;  /* Reduced from 24px */
             }
         """)
         header_layout = QVBoxLayout(header_frame)
         header_layout.setSpacing(16)
         
-        # Main title
-        title = QLabel("Obsidian Tools")
-        title.setFont(QFont("Segoe UI", 24, QFont.Weight.Bold))
-        title.setStyleSheet("color: #0f172a; margin: 0;")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header_layout.addWidget(title)
+        # Title
+        title_label = QLabel("Obsidian Tools")
+        title_label.setStyleSheet("""
+            QLabel {
+                font-size: 20px;  /* Reduced from 24px */
+                font-weight: 700;
+                color: #111827;
+                margin-bottom: 4px;  /* Reduced from 8px */
+            }
+        """)
         
         # Subtitle
-        subtitle = QLabel("Professional vault analysis and document ingestion")
-        subtitle.setFont(QFont("Segoe UI", 14))
-        subtitle.setStyleSheet("color: #475569; margin: 0;")
-        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header_layout.addWidget(subtitle)
+        subtitle_label = QLabel("Professional vault analysis and document ingestion")
+        subtitle_label.setStyleSheet("""
+            QLabel {
+                font-size: 13px;  /* Reduced from 14px */
+                color: #6b7280;
+                font-weight: 500;
+            }
+        """)
+        
+        header_layout.addWidget(title_label)
+        header_layout.addWidget(subtitle_label)
         
         layout.addWidget(header_frame)
 
@@ -579,7 +589,7 @@ class ObsidianToolsGUI(QMainWindow):
         # Status info
         status_info = QLabel("Monitor operation progress and view detailed logs below.\n\nProgress bar shows current operation status, while the log displays real-time information.")
         status_info.setWordWrap(True)
-        status_info.setStyleSheet("color: #6b7280; font-size: 13px; line-height: 1.4;")
+        status_info.setStyleSheet("color: #6b7280; font-size: 12px; line-height: 1.4;")  # Reduced from 13px
         left_progress.addWidget(status_info)
         
         left_progress.addStretch()
@@ -587,7 +597,7 @@ class ObsidianToolsGUI(QMainWindow):
         
         # Right side: Log output
         right_logs = QVBoxLayout()
-        right_logs.setSpacing(16)
+        right_logs.setSpacing(12)  # Reduced from 16
         
         # Log output
         log_label = QLabel("Operation Log")
@@ -619,22 +629,22 @@ class ObsidianToolsGUI(QMainWindow):
         """Create the vault analysis tab with modern design."""
         analyze_widget = QWidget()
         layout = QHBoxLayout(analyze_widget)  # Changed to horizontal layout
-        layout.setSpacing(24)
-        layout.setContentsMargins(32, 32, 32, 32)
+        layout.setSpacing(16)  # Reduced from 24
+        layout.setContentsMargins(20, 20, 20, 20)  # Reduced from 32
         
         # Left side: Parameters and Actions
         left_side = QVBoxLayout()
-        left_side.setSpacing(24)
+        left_side.setSpacing(16)  # Reduced from 24
         
         # Top row: Parameters and Analysis button side by side
         top_row = QHBoxLayout()
-        top_row.setSpacing(24)
+        top_row.setSpacing(16)  # Reduced from 24
         
         # Analysis parameters
         params_group = ModernGroupBox("Analysis Parameters")
         params_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         params_layout = QFormLayout(params_group)
-        params_layout.setSpacing(16)
+        params_layout.setSpacing(12)  # Reduced from 16
         params_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
         
         # Output file
@@ -659,7 +669,7 @@ class ObsidianToolsGUI(QMainWindow):
         action_group = ModernGroupBox("Actions")
         action_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         action_layout = QVBoxLayout(action_group)
-        action_layout.setSpacing(16)
+        action_layout.setSpacing(12)  # Reduced from 16
         
         # Analysis button
         self.analyze_button = ModernButton("🔍 Analyze Vault", primary=True, size="large")
@@ -669,7 +679,7 @@ class ObsidianToolsGUI(QMainWindow):
         # Add some spacing and status info
         status_info = QLabel("Click the button above to start vault analysis.\n\nThis will analyze your Obsidian vault and generate recommendations for improving note structure and linking.")
         status_info.setWordWrap(True)
-        status_info.setStyleSheet("color: #6b7280; font-size: 13px; line-height: 1.4;")
+        status_info.setStyleSheet("color: #6b7280; font-size: 12px; line-height: 1.4;")  # Reduced from 13px
         action_layout.addWidget(status_info)
         
         action_layout.addStretch()
@@ -709,23 +719,25 @@ class ObsidianToolsGUI(QMainWindow):
         """Create the document ingestion tab with modern design."""
         ingest_widget = QWidget()
         layout = QVBoxLayout(ingest_widget)
-        layout.setSpacing(24)
-        layout.setContentsMargins(32, 32, 32, 32)
+        layout.setSpacing(16)  # Reduced from 24
+        layout.setContentsMargins(20, 20, 20, 20)  # Reduced from 32
         
-        # Top row: Folder configuration and options side by side
+        # Top section: Folder configuration and options side by side
         top_row = QHBoxLayout()
-        top_row.setSpacing(24)
+        top_row.setSpacing(16)  # Reduced from 24
         
         # Left side: Folder configuration
         folders_group = ModernGroupBox("Folder Configuration")
         folders_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         folders_layout = QFormLayout(folders_group)
-        folders_layout.setSpacing(16)
+        folders_layout.setSpacing(12)  # Reduced from 16
         folders_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
         
         # Ingest folder selection
         ingest_folder_layout = QHBoxLayout()
-        self.ingest_folder_edit = ModernLineEdit(placeholder="Enter ingest folder path", initial_text="ingest")
+        ingest_folder_layout.setSpacing(8)  # Reduced spacing
+        
+        self.ingest_folder_edit = ModernLineEdit(placeholder="Select ingest folder", initial_text="ingest")
         ingest_folder_layout.addWidget(self.ingest_folder_edit)
         
         self.ingest_folder_button = ModernButton("📁 Browse...", size="small")
@@ -735,7 +747,9 @@ class ObsidianToolsGUI(QMainWindow):
         
         # Notes folder selection
         notes_folder_layout = QHBoxLayout()
-        self.notes_folder_edit = ModernLineEdit(placeholder="Enter notes folder path", initial_text="Inbox/Generated")
+        notes_folder_layout.setSpacing(8)  # Reduced spacing
+        
+        self.notes_folder_edit = ModernLineEdit(placeholder="Select notes folder", initial_text="GeneratedNotes")
         notes_folder_layout.addWidget(self.notes_folder_edit)
         
         self.notes_folder_button = ModernButton("📁 Browse...", size="small")
@@ -749,7 +763,7 @@ class ObsidianToolsGUI(QMainWindow):
         right_group = ModernGroupBox("Options & Actions")
         right_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         right_layout = QVBoxLayout(right_group)
-        right_layout.setSpacing(16)
+        right_layout.setSpacing(12)  # Reduced from 16
         
         # Model selection
         model_label = QLabel("🤖 LLM Model:")
@@ -767,11 +781,11 @@ class ObsidianToolsGUI(QMainWindow):
             QComboBox {
                 border: 2px solid #e5e7eb;
                 border-radius: 8px;
-                padding: 8px 12px;
-                font-size: 14px;
+                padding: 6px 10px;  /* Reduced from 8px 12px */
+                font-size: 13px;  /* Reduced from 14px */
                 background-color: white;
                 color: #111827;
-                min-height: 20px;
+                min-height: 18px;  /* Reduced from 20px */
             }
             QComboBox:focus {
                 border-color: #2563eb;
@@ -782,7 +796,7 @@ class ObsidianToolsGUI(QMainWindow):
                 width: 20px;
             }
             QComboBox::down-arrow {
-                image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iMTIiIHZpZXdCb3g9IjAgMCAxMiAxMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTMgNEw2IDdMOSA0IiBzdHJva2U9IiM2YjcyODAiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+Cjwvc3ZnPgo=);
+                image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iMTIiIHZpZXdCb3g9IjAgMCAxMiAxMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTMgNEw2IDdNOSA0IiBzdHJva2U9IiM2YjcyODAiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+Cjwvc3ZnPgo=);
                 width: 12px;
                 height: 12px;
             }
@@ -803,7 +817,7 @@ class ObsidianToolsGUI(QMainWindow):
         # Add some spacing and status info
         status_info = QLabel("Configure your folders above and click the button to start document ingestion.\n\nThis will process documents in your ingest folder and create structured notes in Obsidian.")
         status_info.setWordWrap(True)
-        status_info.setStyleSheet("color: #6b7280; font-size: 13px; line-height: 1.4;")
+        status_info.setStyleSheet("color: #6b7280; font-size: 12px; line-height: 1.4;")  # Reduced from 13px
         right_layout.addWidget(status_info)
         
         right_layout.addStretch()
@@ -814,6 +828,7 @@ class ObsidianToolsGUI(QMainWindow):
         # Bottom row: File list and refresh controls
         files_group = ModernGroupBox("Files in Ingest Folder")
         files_layout = QVBoxLayout(files_group)
+        files_layout.setSpacing(12)  # Reduced from default
         
         # File count and refresh button row
         file_header_layout = QHBoxLayout()
@@ -850,25 +865,56 @@ class ObsidianToolsGUI(QMainWindow):
         self.tab_widget.addTab(ingest_widget, "📥 Ingest Documents")
 
     def create_config_tab(self):
-        """Create the configuration tab with modern design."""
+        """Create the configuration tab with modern design and scroll capability."""
         config_widget = QWidget()
-        layout = QVBoxLayout(config_widget)
-        layout.setSpacing(24)
-        layout.setContentsMargins(32, 32, 32, 32)
+        
+        # Create scroll area for the configuration content
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollBar:vertical {
+                background-color: #f3f4f6;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #d1d5db;
+                border-radius: 6px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #9ca3af;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+        """)
+        
+        # Create the scrollable content widget
+        content_widget = QWidget()
+        layout = QVBoxLayout(content_widget)
+        layout.setSpacing(16)  # Reduced from 24
+        layout.setContentsMargins(20, 20, 20, 20)  # Reduced from 32
         
         # Security method selection
         security_group = ModernGroupBox("Security Method")
         security_layout = QVBoxLayout(security_group)
-        security_layout.setSpacing(16)
+        security_layout.setSpacing(12)  # Reduced from 16
         
         # Security method radio buttons
         self.security_local_radio = QRadioButton("🔒 Local Encrypted Storage")
         self.security_local_radio.setChecked(True)
         self.security_local_radio.setStyleSheet("""
             QRadioButton {
-                font-size: 14px;
+                font-size: 13px;  /* Reduced from 14px */
                 color: #111827;
-                spacing: 12px;
+                spacing: 8px;  /* Reduced from 12px */
             }
         """)
         security_layout.addWidget(self.security_local_radio)
@@ -876,9 +922,9 @@ class ObsidianToolsGUI(QMainWindow):
         self.security_1password_radio = QRadioButton("🔑 1Password Integration")
         self.security_1password_radio.setStyleSheet("""
             QRadioButton {
-                font-size: 14px;
+                font-size: 13px;  /* Reduced from 14px */
                 color: #111827;
-                spacing: 12px;
+                spacing: 8px;  /* Reduced from 12px */
             }
         """)
         security_layout.addWidget(self.security_1password_radio)
@@ -889,6 +935,7 @@ class ObsidianToolsGUI(QMainWindow):
         
         # Master password input (for local encryption)
         self.master_password_layout = QHBoxLayout()
+        self.master_password_layout.setSpacing(12)  # Reduced from default
         self.master_password_edit = ModernLineEdit(placeholder="Enter master password for encryption")
         self.master_password_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.master_password_layout.addWidget(self.master_password_edit)
@@ -904,7 +951,7 @@ class ObsidianToolsGUI(QMainWindow):
         # Connection settings
         connection_group = ModernGroupBox("Connection Settings")
         connection_layout = QFormLayout(connection_group)
-        connection_layout.setSpacing(16)
+        connection_layout.setSpacing(12)  # Reduced from 16
         connection_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
         
         # Obsidian API URL
@@ -924,11 +971,11 @@ class ObsidianToolsGUI(QMainWindow):
         # API Keys section
         api_keys_group = ModernGroupBox("API Keys")
         api_keys_layout = QVBoxLayout(api_keys_group)
-        api_keys_layout.setSpacing(16)
+        api_keys_layout.setSpacing(12)  # Reduced from 16
         
         # Local API keys (for local encrypted storage)
         self.local_keys_layout = QFormLayout()
-        self.local_keys_layout.setSpacing(16)
+        self.local_keys_layout.setSpacing(12)  # Reduced from 16
         self.local_keys_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
         
         self.obsidian_api_key_edit = ModernLineEdit(placeholder="Enter Obsidian API key")
@@ -943,7 +990,7 @@ class ObsidianToolsGUI(QMainWindow):
         
         # 1Password references (for 1Password integration)
         self.onepassword_layout = QFormLayout()
-        self.onepassword_layout.setSpacing(16)
+        self.onepassword_layout.setSpacing(12)  # Reduced from 16
         self.onepassword_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
         
         self.obsidian_1p_ref_edit = ModernLineEdit(placeholder="op://vault/item/field")
@@ -959,7 +1006,7 @@ class ObsidianToolsGUI(QMainWindow):
         # Ingest settings
         ingest_config_group = ModernGroupBox("Ingest Settings")
         ingest_config_layout = QFormLayout(ingest_config_group)
-        ingest_config_layout.setSpacing(16)
+        ingest_config_layout.setSpacing(12)  # Reduced from 16
         ingest_config_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
         
         # Default ingest folder
@@ -982,11 +1029,11 @@ class ObsidianToolsGUI(QMainWindow):
             QComboBox {
                 border: 2px solid #e5e7eb;
                 border-radius: 8px;
-                padding: 8px 12px;
-                font-size: 14px;
+                padding: 6px 10px;  /* Reduced from 8px 12px */
+                font-size: 13px;  /* Reduced from 14px */
                 background-color: white;
                 color: #111827;
-                min-height: 20px;
+                min-height: 18px;  /* Reduced from 20px */
             }
             QComboBox:focus {
                 border-color: #2563eb;
@@ -1000,7 +1047,7 @@ class ObsidianToolsGUI(QMainWindow):
         # Action buttons
         actions_group = ModernGroupBox("Configuration Actions")
         actions_layout = QHBoxLayout(actions_group)
-        actions_layout.setSpacing(16)
+        actions_layout.setSpacing(12)  # Reduced from 16
         
         # Test connection button
         self.test_connection_button = ModernButton("🔗 Test Connection", size="medium")
@@ -1035,10 +1082,18 @@ class ObsidianToolsGUI(QMainWindow):
         status_layout = QVBoxLayout(status_group)
         
         self.config_status_label = QLabel("Configuration not loaded")
-        self.config_status_label.setStyleSheet("color: #6b7280; font-size: 13px;")
+        self.config_status_label.setStyleSheet("color: #6b7280; font-size: 12px;")  # Reduced from 13px
         status_layout.addWidget(self.config_status_label)
         
         layout.addWidget(status_group)
+        
+        # Set the content widget as the scroll area's widget
+        scroll_area.setWidget(content_widget)
+        
+        # Add the scroll area to the main config widget
+        config_layout = QVBoxLayout(config_widget)
+        config_layout.setContentsMargins(0, 0, 0, 0)
+        config_layout.addWidget(scroll_area)
         
         self.tab_widget.addTab(config_widget, "⚙️ Configuration")
 
