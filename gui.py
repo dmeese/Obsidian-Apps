@@ -994,9 +994,13 @@ class ObsidianToolsGUI(QMainWindow):
         self.onepassword_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
         
         self.obsidian_1p_ref_edit = ModernLineEdit(placeholder="op://vault/item/field")
+        self.obsidian_1p_ref_edit.textChanged.connect(self.strip_quotes_from_1p_ref)
+        self.obsidian_1p_ref_edit.setToolTip("1Password reference (e.g., op://vault/item/field)\nQuotes are automatically stripped if present.")
         self.onepassword_layout.addRow("Obsidian API Key Ref:", self.obsidian_1p_ref_edit)
         
         self.gemini_1p_ref_edit = ModernLineEdit(placeholder="op://vault/item/field")
+        self.gemini_1p_ref_edit.textChanged.connect(self.strip_quotes_from_1p_ref)
+        self.gemini_1p_ref_edit.setToolTip("1Password reference (e.g., op://vault/item/field)\nQuotes are automatically stripped if present.")
         self.onepassword_layout.addRow("Gemini API Key Ref:", self.gemini_1p_ref_edit)
         
         api_keys_layout.addLayout(self.onepassword_layout)
@@ -1496,8 +1500,8 @@ class ObsidianToolsGUI(QMainWindow):
                 
             else:
                 # 1Password integration
-                secrets["obsidian_api_key_ref"] = self.obsidian_1p_ref_edit.text().strip()
-                secrets["gemini_api_key_ref"] = self.gemini_1p_ref_edit.text().strip()
+                secrets["obsidian_api_key_ref"] = self.strip_1password_quotes(self.obsidian_1p_ref_edit.text().strip())
+                secrets["gemini_api_key_ref"] = self.strip_1password_quotes(self.gemini_1p_ref_edit.text().strip())
             
             # Save configuration
             self.config_manager.save_config(config)
@@ -1544,8 +1548,21 @@ class ObsidianToolsGUI(QMainWindow):
         else:
             if not self.obsidian_1p_ref_edit.text().strip():
                 errors.append("Obsidian API key reference is required for 1Password")
+            else:
+                # Validate 1Password reference format
+                obsidian_ref = self.strip_1password_quotes(self.obsidian_1p_ref_edit.text().strip())
+                is_valid, error_msg = self.validate_1password_reference(obsidian_ref)
+                if not is_valid:
+                    errors.append(f"Obsidian API key reference: {error_msg}")
+            
             if not self.gemini_1p_ref_edit.text().strip():
                 errors.append("Gemini API key reference is required for 1Password")
+            else:
+                # Validate 1Password reference format
+                gemini_ref = self.strip_1password_quotes(self.gemini_1p_ref_edit.text().strip())
+                is_valid, error_msg = self.validate_1password_reference(gemini_ref)
+                if not is_valid:
+                    errors.append(f"Gemini API key reference: {error_msg}")
         
         if errors:
             QMessageBox.warning(self, "Validation Error", 
@@ -1569,6 +1586,8 @@ class ObsidianToolsGUI(QMainWindow):
                 try:
                     ref = self.obsidian_1p_ref_edit.text().strip()
                     if ref:
+                        # Strip quotes from 1Password reference
+                        ref = self.strip_1password_quotes(ref)
                         api_key = self.config_manager._fetch_1password_secret(ref)
                     else:
                         QMessageBox.warning(self, "Validation Error", "Please enter a 1Password reference")
@@ -1661,6 +1680,62 @@ class ObsidianToolsGUI(QMainWindow):
         cursor = self.log_output.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         self.log_output.setTextCursor(cursor)
+
+    def strip_quotes_from_1p_ref(self):
+        """Strip quotes from 1Password reference line edits."""
+        # Get the sender to determine which field was changed
+        sender = self.sender()
+        if not sender:
+            return
+            
+        text = sender.text()
+        stripped_text = text
+        
+        # Remove surrounding quotes (both single and double quotes)
+        if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
+            stripped_text = text[1:-1]
+            # Only update if we actually stripped quotes to avoid infinite loops
+            if stripped_text != text:
+                sender.setText(stripped_text)
+                # Show a brief status message
+                field_name = "Obsidian API key" if sender == self.obsidian_1p_ref_edit else "Gemini API key"
+                self.config_status_label.setText(f"ℹ️ Quotes automatically removed from {field_name} reference")
+                self.config_status_label.setStyleSheet("color: #3b82f6; font-size: 12px;")
+                # Clear the message after 3 seconds
+                QTimer.singleShot(3000, lambda: self.config_status_label.setText("Configuration not loaded"))
+    
+    def strip_1password_quotes(self, text):
+        """Utility method to strip quotes from 1Password references."""
+        if not text:
+            return text
+        
+        # First strip whitespace to handle cases like '  "text"  '
+        text = text.strip()
+        
+        # Remove surrounding quotes (both single and double quotes)
+        if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
+            text = text[1:-1]
+        
+        # Also clean up common formatting issues
+        text = text.replace('\n', '').replace('\r', '')  # Remove newlines and carriage returns
+        
+        return text
+    
+    def validate_1password_reference(self, ref):
+        """Validate 1Password reference format."""
+        if not ref:
+            return False, "1Password reference cannot be empty"
+        
+        # Check if it starts with op://
+        if not ref.startswith('op://'):
+            return False, "1Password reference must start with 'op://'"
+        
+        # Check if it has the required parts: op://vault/item/field
+        parts = ref.split('/')
+        if len(parts) < 5:  # op://vault/item/field = 5 parts
+            return False, "1Password reference must be in format: op://vault/item/field"
+        
+        return True, "Valid 1Password reference"
 
 
 def main():
