@@ -7,7 +7,14 @@ import urllib.parse
 import requests
 import google.generativeai as genai
 from pypdf import PdfReader
-from typing import List, Dict
+from typing import List, Dict, TypedDict, Literal
+
+
+class Note(TypedDict):
+    """Represents a note with title, content, and type."""
+    title: str
+    content: str
+    type: Literal["atomic", "structure"]
 
 
 def read_file_content(file_path: str) -> str:
@@ -31,39 +38,62 @@ def read_file_content(file_path: str) -> str:
         return ""
 
 
-def analyze_with_gemini(model, text_content: str) -> List[Dict[str, str]]:
-    """Sends text to Gemini for analysis and decomposition into atomic notes."""
+def analyze_with_gemini(model, text_content: str) -> List[Note]:
+    """
+    Sends text to Gemini to be decomposed into an interconnected set of
+    evergreen-style notes for Obsidian.
+    """
     if not text_content.strip():
         logging.warning("Skipping Gemini analysis for empty content.")
         return []
 
     logging.info("Sending content to Gemini for analysis. This may take a moment...")
+
+    # --- START OF REVISED PROMPT ---
+    prompt = f"""
+    You are a digital knowledge architect. Your expertise is in Zettelkasten, evergreen notes, and building robust personal knowledge management (PKM) systems. Your goal is to transform the provided text into a rich, interconnected network of notes.
+
+    **Core Task:**
+    Analyze the following text and decompose it into a series of notes. Critically, you must then establish connections BETWEEN these notes by embedding `[[wikilinks]]` in their content.
+
+    **Guidelines:**
+    1.  **Note Types:**
+        -   **Atomic Notes:** The majority of notes should be 'atomic,' focusing on a single, core idea.
+        -   **Structure Notes:** If the text covers a broad topic with several distinct sub-concepts, you MUST generate a "Structure Note." This note serves as a hub or Map of Content (MOC). Its content should be a brief summary of the topic and a list of `[[wikilinks]]` pointing to the relevant atomic notes you are creating.
+
+    2.  **Connectivity is Key:**
+        -   For every note you generate, actively look for concepts that are mentioned in other notes from this same batch.
+        -   When you find a connection, embed a markdown wikilink, like `[[Title of the Other Note]]`, directly into the content.
+        -   The link text MUST EXACTLY match the title of the note you are linking to.
+
+    3.  **Note Content:**
+        -   Titles must be concise, declarative statements of the core concept.
+        -   Content should be written in your own words, in clear, simple language, as if explaining the concept to an intelligent peer.
+        -   Use standard markdown for formatting (e.g., lists, bolding).
+
+    **Output Format:**
+    You MUST return your response as a single, valid JSON array `[]`. Do not include markdown fences (\`\`\`json) or any other text outside the array. Each object in the array represents one note and must have the following structure:
+    `{{ "title": "A Concise, Declarative Title", "content": "The full markdown content of the note, including [[wikilinks]] to other notes.", "type": "atomic" or "structure" }}`
+
+    **Text to Analyze:**
+    ---
+    {text_content}
+    ---
+    """
+    # --- END OF REVISED PROMPT ---
+
     try:
-        prompt = f"""
-        You are an expert in knowledge management, specializing in Zettelkasten and evergreen note-taking principles.
-        Your task is to analyze the following text and decompose it into a series of atomic, concept-oriented notes.
-
-        **Guidelines:**
-        1.  **Atomicity:** Each note must focus on a single, core idea.
-        2.  **Clarity:** Write notes in clear, simple language. The title should be a concise statement of the core concept.
-        3.  **Connectivity:** The content should be written to encourage future linking. Do not add `[[wikilinks]]` yourself.
-        4.  **Formatting:** Use standard markdown for the note content.
-
-        **Output Format:**
-        Return your response as a valid JSON array `[]` where each object in the array represents a single note and has the following structure:
-        `{{ "title": "A Concise, Declarative Title for the Note", "content": "The full markdown content of the note." }}`
-
-        Do not include any text or explanation outside of the JSON array.
-
-        **Text to Analyze:**
-        ---
-        {text_content}
-        ---
-        """
-
         response = model.generate_content(prompt)
-        # Clean up the response to ensure it's valid JSON
-        cleaned_response = response.text.strip().replace("```json", "").replace("```", "")
+        # Modern models are better at strict JSON output, so complex cleaning is often less necessary.
+        # A simple strip is usually sufficient if the prompt is strong.
+        cleaned_response = response.text.strip()
+
+        # Handle cases where the model might still wrap the output in markdown fences
+        if cleaned_response.startswith("```"):
+            cleaned_response = cleaned_response[7:-3].strip()
+        elif cleaned_response.startswith("`"):
+            cleaned_response = cleaned_response.strip("`")
+
         try:
             return json.loads(cleaned_response)
         except json.JSONDecodeError:
@@ -79,7 +109,7 @@ def analyze_with_gemini(model, text_content: str) -> List[Dict[str, str]]:
 def create_notes_in_vault(
     session: requests.Session,
     api_url: str,
-    notes_to_create: List[Dict[str, str]],
+    notes_to_create: List[Note],
     output_folder: str,
     timeout: int,
 ):
@@ -92,10 +122,13 @@ def create_notes_in_vault(
     for note in notes_to_create:
         title = note.get("title")
         content = note.get("content")
+        note_type = note.get("type", "atomic")  # Default to atomic if type is missing
 
         if not title or not content:
             logging.warning(f"Skipping note with missing title or content: {note}")
             continue
+
+        logging.info(f"Creating {note_type} note: {title}")
 
         # Sanitize title to create a valid filename
         sanitized_title = re.sub(r'[\\/*?:"<>|]', "", title)
@@ -111,6 +144,14 @@ def create_notes_in_vault(
                 timeout=timeout,
             )
             response.raise_for_status()
+            
+            # Log connectivity information
+            wikilinks = re.findall(r'\[\[([^\]]+)\]\]', content)
+            if wikilinks:
+                logging.info(f"Note '{title}' contains {len(wikilinks)} wikilinks: {', '.join(wikilinks)}")
+            else:
+                logging.info(f"Note '{title}' has no wikilinks")
+                
         except requests.exceptions.RequestException as e:
             logging.error(f"Failed to create note '{note_path}': {e}")
 
@@ -152,6 +193,16 @@ def run_ingest_process(
                 
                 decomposed_notes = analyze_with_gemini(model, content)
                 if decomposed_notes:
+                    # Log note generation summary
+                    atomic_count = sum(1 for note in decomposed_notes if note.get("type") == "atomic")
+                    structure_count = sum(1 for note in decomposed_notes if note.get("type") == "structure")
+                    total_wikilinks = sum(len(re.findall(r'\[\[([^\]]+)\]\]', note.get("content", ""))) for note in decomposed_notes)
+                    
+                    logging.info(f"Generated {len(decomposed_notes)} notes from {filename}:")
+                    logging.info(f"  - {atomic_count} atomic notes")
+                    logging.info(f"  - {structure_count} structure notes")
+                    logging.info(f"  - {total_wikilinks} total wikilinks for connectivity")
+                    
                     create_notes_in_vault(session, api_url, decomposed_notes, notes_folder, timeout)
                     processed_files.append(file_path)
                     logging.info(f"Successfully processed {filename}")
