@@ -8,22 +8,42 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import base64
+import sys
 
 
 class ConfigEncryption:
     """Handles encryption and decryption of sensitive configuration data."""
     
-    def __init__(self):
-        # Fixed salt for key derivation (in production, this could be user-specific)
-        self.salt = b'obsidian_tools_salt_2024'
+    def __init__(self, config_dir: Path):
+        self.config_dir = config_dir
+        self.salt_file = config_dir / ".salt"
+        self._ensure_salt_exists()
+    
+    def _ensure_salt_exists(self):
+        """Generate a unique random salt if it doesn't exist"""
+        if not self.salt_file.exists():
+            # Generate a cryptographically secure random salt
+            salt = os.urandom(32)  # 256-bit random salt
+            # Store the salt in a hidden file
+            with open(self.salt_file, 'wb') as f:
+                f.write(salt)
+            # Set restrictive permissions (owner read/write only)
+            try:
+                os.chmod(self.salt_file, 0o600)
+            except OSError:
+                pass  # Windows may not support chmod
         
+        # Load the existing salt
+        with open(self.salt_file, 'rb') as f:
+            self.salt = f.read()
+    
     def derive_key(self, master_password: str) -> bytes:
         """Derive encryption key from master password using PBKDF2."""
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=self.salt,
-            iterations=100000,
+            iterations=600000,  # Increased from default for better security
         )
         return base64.urlsafe_b64encode(kdf.derive(master_password.encode()))
     
@@ -60,7 +80,7 @@ class ConfigManager:
         self.secrets_file = self.config_dir / "secrets.encrypted"
         self.example_file = self.config_dir / "config.example.json"
         
-        self.encryption = ConfigEncryption()
+        self.encryption = ConfigEncryption(self.config_dir)
         self._config_cache: Optional[Dict[str, Any]] = None
         self._secrets_cache: Optional[Dict[str, Any]] = None
         

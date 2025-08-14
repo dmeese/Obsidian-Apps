@@ -97,6 +97,7 @@ env/
 # Configuration files with secrets
 config/secrets.encrypted
 config/*.key
+config/.salt
 *.encrypted
 .env.local
 .env.production

@@ -4,11 +4,22 @@ This directory contains the configuration files for Obsidian Tools. The system s
 
 ## 🔐 Security Methods
 
+### Security Considerations
+
+**⚠️ Important Security Notes:**
+- **Master Password**: Choose a strong, unique password. If compromised, all encrypted data can be accessed.
+- **Salt File**: The `.salt` file contains the unique salt for your installation. Keep it secure and never share it.
+- **File Permissions**: The system attempts to set restrictive permissions on sensitive files (owner read/write only).
+- **Backup Security**: When backing up configuration, ensure encrypted files and salt files are stored securely.
+- **Multi-User Systems**: Each user should have their own configuration directory with unique salts.
+
 ### 1. Local Encrypted Storage (Default)
 - **Master Password**: You set a master password to encrypt sensitive data
 - **Encryption**: Uses AES-256-GCM encryption with PBKDF2 key derivation
+- **Salt**: Unique 256-bit random salt generated per installation (stored in `.salt` file)
+- **Key Derivation**: 600,000 PBKDF2 iterations for enhanced security
 - **Storage**: Sensitive data stored locally in encrypted `secrets.encrypted` file
-- **Benefits**: Works offline, no external dependencies, full control
+- **Benefits**: Works offline, no external dependencies, full control, unique per installation
 
 ### 2. 1Password Integration
 - **References**: Store 1Password references (e.g., `op://vault/item/field`)
