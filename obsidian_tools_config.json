@@ -6,7 +6,7 @@
       "default_notes_folder": "GeneratedNotes"
     },
     "gemini": {
-      "default_model": "gemini-2.5-flash-lite",
+      "default_model": "gemini-2.5-flash",
       "timeout": 60
     },
     "ingest": {
@@ -18,7 +18,7 @@
       "encryption_algorithm": "AES-256-GCM"
     }
   },
-  "exported_at": "E:\\Coding Projects\\ObsidianTools",
+  "exported_at": "2025-08-13 21:56:05.200613",
   "version": "1.0",
   "secrets": "*** ENCRYPTED ***"
 }

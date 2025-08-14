@@ -2,6 +2,7 @@ import sys
 import os
 import logging
 import threading
+import json
 from typing import Optional
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -426,8 +427,11 @@ class ObsidianToolsGUI(QMainWindow):
         
         self.init_ui()
         self.load_configuration()
-        self.connect_to_obsidian()
         self.setup_responsive_design()
+        
+        # Connect to Obsidian after UI is fully initialized
+        # Use QTimer to ensure this runs after the UI is displayed
+        QTimer.singleShot(100, self.connect_to_obsidian)
 
     def init_ui(self):
         """Initialize the user interface with modern design."""
@@ -553,6 +557,12 @@ class ObsidianToolsGUI(QMainWindow):
         status_layout.addWidget(self.status_label)
         
         status_layout.addStretch()
+        
+        # Add refresh button
+        self.refresh_status_button = ModernButton("🔄 Refresh Status", size="small")
+        self.refresh_status_button.clicked.connect(self.refresh_connection_status)
+        self.refresh_status_button.setToolTip("Refresh connection status and retry connection")
+        status_layout.addWidget(self.refresh_status_button)
         
         layout.addWidget(self.status_frame)
 
@@ -1134,13 +1144,126 @@ class ObsidianToolsGUI(QMainWindow):
             default_model, gemini_timeout = self.config_manager.get_gemini_config()
             default_ingest_folder, _, default_delete_after = self.config_manager.get_ingest_config()
             
-            # Get API keys
-            try:
-                obsidian_api_key, self.gemini_api_key = self.config_manager.get_api_keys(self.master_password)
-            except ValueError as e:
-                self.update_status(f"❌ Configuration incomplete: {str(e)}", "error")
-                self.log_message(f"Configuration error: {str(e)}")
-                return
+            # Get API keys based on security method
+            config = self.config_manager.load_config()
+            security_method = config.get("security", {}).get("method", "local_encrypted")
+            
+            if security_method == "1password":
+                # For 1Password, we need to check if references exist and optionally fetch actual keys
+                try:
+                    # Read references from the GUI fields (which should already be populated)
+                    obsidian_api_key_ref = self.obsidian_1p_ref_edit.text().strip()
+                    gemini_api_key_ref = self.gemini_1p_ref_edit.text().strip()
+                    
+                    if not obsidian_api_key_ref or not gemini_api_key_ref:
+                        self.update_status("⚠️ 1Password mode: API key references not configured", "warning")
+                        self.log_message("Configuration warning: 1Password references not found")
+                        # Don't return - continue with setup but mark as not fully connected
+                        self.api_url = api_url
+                        self.session = None
+                        self.gemini_api_key = None
+                        
+                        # Set default values in ingest tab
+                        self.ingest_folder_edit.setText(default_ingest_folder)
+                        self.notes_folder_edit.setText(default_notes_folder)
+                        self.delete_files_checkbox.setChecked(default_delete_after)
+                        self.model_combo.setCurrentText(default_model)
+                        
+                        # Refresh file list
+                        self.refresh_file_list()
+                        return
+                    
+                    # Try to fetch actual keys from 1Password, but don't fail if not authenticated
+                    try:
+                        obsidian_api_key = self.config_manager._fetch_1password_secret(obsidian_api_key_ref)
+                        self.gemini_api_key = self.config_manager._fetch_1password_secret(gemini_api_key_ref)
+                        
+                        # If we got here, we successfully fetched the keys
+                        self.api_url = api_url
+                        self.session = create_api_session(obsidian_api_key)
+                        
+                        # Verify connection
+                        verify_connection(self.session, self.api_url, timeout)
+                        
+                        # Update UI
+                        self.update_status("✅ Connected to Obsidian", "success")
+                        
+                        # Update configuration status to show successful connection
+                        if hasattr(self, 'config_status_label'):
+                            self.config_status_label.setText("✅ Connected to Obsidian successfully")
+                            self.config_status_label.setStyleSheet("color: #10b981; font-size: 13px;")
+                        
+                        # Set default values in ingest tab
+                        self.ingest_folder_edit.setText(default_ingest_folder)
+                        self.notes_folder_edit.setText(default_notes_folder)
+                        self.delete_files_checkbox.setChecked(default_delete_after)
+                        self.model_combo.setCurrentText(default_model)
+                        
+                        # Refresh file list
+                        self.refresh_file_list()
+                        return
+                        
+                    except Exception as e:
+                        # 1Password might not be logged in - show warning instead of error
+                        if "not signed in" in str(e).lower() or "authentication" in str(e).lower():
+                            self.update_status("⚠️ 1Password not authenticated - please sign in via CLI", "warning")
+                            self.log_message(f"1Password authentication required: {str(e)}")
+                        else:
+                            self.update_status(f"⚠️ 1Password error: {str(e)}", "warning")
+                            self.log_message(f"1Password error: {str(e)}")
+                        
+                        # Update configuration status
+                        if hasattr(self, 'config_status_label'):
+                            self.config_status_label.setText("⚠️ 1Password authentication required")
+                            self.config_status_label.setStyleSheet("color: #f59e0b; font-size: 12px;")
+                        
+                        # Continue with setup but mark as not fully connected
+                        self.api_url = api_url
+                        self.session = None
+                        self.gemini_api_key = None
+                        
+                        # Set default values in ingest tab
+                        self.ingest_folder_edit.setText(default_ingest_folder)
+                        self.notes_folder_edit.setText(default_notes_folder)
+                        self.delete_files_checkbox.setChecked(default_delete_after)
+                        self.model_combo.setCurrentText(default_model)
+                        
+                        # Refresh file list
+                        self.refresh_file_list()
+                        return
+                    
+                except Exception as e:
+                    # General error loading secrets - show warning
+                    self.update_status(f"⚠️ Configuration warning: {str(e)}", "warning")
+                    self.log_message(f"Configuration warning: {str(e)}")
+                    
+                    # Update configuration status
+                    if hasattr(self, 'config_status_label'):
+                        self.config_status_label.setText(f"⚠️ Configuration warning: {str(e)}")
+                        self.config_status_label.setStyleSheet("color: #f59e0b; font-size: 12px;")
+                    
+                    # Continue with setup but mark as not fully connected
+                    self.api_url = api_url
+                    self.session = None
+                    self.gemini_api_key = None
+                    
+                    # Set default values in ingest tab
+                    self.ingest_folder_edit.setText(default_ingest_folder)
+                    self.notes_folder_edit.setText(default_notes_folder)
+                    self.delete_files_checkbox.setChecked(default_delete_after)
+                    self.model_combo.setCurrentText(default_model)
+                    
+                    # Refresh file list
+                    self.refresh_file_list()
+                    return
+            else:
+                # For local encrypted storage
+                try:
+                    obsidian_api_key, self.gemini_api_key = self.config_manager.get_api_keys(self.master_password)
+                except ValueError as e:
+                    self.update_status(f"❌ Configuration incomplete: {str(e)}", "error")
+                    self.log_message(f"Configuration error: {str(e)}")
+                    return
             
             # Store API URL
             self.api_url = api_url
@@ -1154,6 +1277,11 @@ class ObsidianToolsGUI(QMainWindow):
             # Update UI
             self.update_status("✅ Connected to Obsidian", "success")
             
+            # Update configuration status to show successful connection
+            if hasattr(self, 'config_status_label'):
+                self.config_status_label.setText("✅ Connected to Obsidian successfully")
+                self.config_status_label.setStyleSheet("color: #10b981; font-size: 13px;")
+            
             # Set default values in ingest tab
             self.ingest_folder_edit.setText(default_ingest_folder)
             self.notes_folder_edit.setText(default_notes_folder)
@@ -1162,6 +1290,183 @@ class ObsidianToolsGUI(QMainWindow):
             
             # Refresh file list
             self.refresh_file_list()
+            
+        except Exception as e:
+            self.update_status(f"❌ Connection failed: {str(e)}", "error")
+            self.log_message(f"Error: {str(e)}")
+
+    def refresh_connection_status(self):
+        """Refresh the connection status by reconnecting to Obsidian."""
+        try:
+            self.log_message("🔄 Refreshing connection status...")
+            self.refresh_status_button.setEnabled(False)
+            self.refresh_status_button.setText("🔄 Connecting...")
+            
+            # Use QTimer to avoid blocking the UI
+            QTimer.singleShot(100, self._perform_connection_refresh)
+        except Exception as e:
+            self.log_message(f"❌ Error in refresh_connection_status: {str(e)}")
+            # Re-enable the button if there's an error
+            self.refresh_status_button.setEnabled(True)
+            self.refresh_status_button.setText("🔄 Refresh Status")
+    
+    def _perform_connection_refresh(self):
+        """Perform the actual connection refresh."""
+        try:
+            self.log_message("🔄 Performing connection refresh...")
+            # Clear previous connection state
+            self.session = None
+            self.gemini_api_key = None
+            
+            # Attempt to reconnect (but don't call refresh_file_list during refresh)
+            self._connect_to_obsidian_refresh()
+            
+        except Exception as e:
+            self.log_message(f"❌ Connection refresh failed: {str(e)}")
+        finally:
+            # Re-enable the refresh button
+            self.refresh_status_button.setEnabled(True)
+            self.refresh_status_button.setText("🔄 Refresh Status")
+    
+    def _connect_to_obsidian_refresh(self):
+        """Connect to Obsidian during refresh (without calling refresh_file_list)."""
+        try:
+            # Get configuration from config manager
+            api_url, timeout, default_notes_folder = self.config_manager.get_obsidian_config()
+            default_model, gemini_timeout = self.config_manager.get_gemini_config()
+            default_ingest_folder, _, default_delete_after = self.config_manager.get_ingest_config()
+            
+            # Get API keys based on security method
+            config = self.config_manager.load_config()
+            security_method = config.get("security", {}).get("method", "local_encrypted")
+            
+            if security_method == "1password":
+                # For 1Password, we need to check if references exist and optionally fetch actual keys
+                try:
+                    # Read references from the GUI fields (which should already be populated)
+                    obsidian_api_key_ref = self.obsidian_1p_ref_edit.text().strip()
+                    gemini_api_key_ref = self.gemini_1p_ref_edit.text().strip()
+                    
+                    if not obsidian_api_key_ref or not gemini_api_key_ref:
+                        self.update_status("⚠️ 1Password mode: API key references not configured", "warning")
+                        self.log_message("Configuration warning: 1Password references not found")
+                        # Don't return - continue with setup but mark as not fully connected
+                        self.api_url = api_url
+                        self.session = None
+                        self.gemini_api_key = None
+                        
+                        # Set default values in ingest tab (but don't refresh file list)
+                        self.ingest_folder_edit.setText(default_ingest_folder)
+                        self.notes_folder_edit.setText(default_notes_folder)
+                        self.delete_files_checkbox.setChecked(default_delete_after)
+                        self.model_combo.setCurrentText(default_model)
+                        return
+                    
+                    # Try to fetch actual keys from 1Password, but don't fail if not authenticated
+                    try:
+                        obsidian_api_key = self.config_manager._fetch_1password_secret(obsidian_api_key_ref)
+                        self.gemini_api_key = self.config_manager._fetch_1password_secret(gemini_api_key_ref)
+                        
+                        # If we got here, we successfully fetched the keys
+                        self.api_url = api_url
+                        self.session = create_api_session(obsidian_api_key)
+                        
+                        # Verify connection
+                        verify_connection(self.session, self.api_url, timeout)
+                        
+                        # Update UI
+                        self.update_status("✅ Connected to Obsidian", "success")
+                        
+                        # Update configuration status to show successful connection
+                        if hasattr(self, 'config_status_label'):
+                            self.config_status_label.setText("✅ Connected to Obsidian successfully")
+                            self.config_status_label.setStyleSheet("color: #10b981; font-size: 13px;")
+                        
+                        # Set default values in ingest tab (but don't refresh file list)
+                        self.ingest_folder_edit.setText(default_ingest_folder)
+                        self.notes_folder_edit.setText(default_notes_folder)
+                        self.delete_files_checkbox.setChecked(default_delete_after)
+                        self.model_combo.setCurrentText(default_model)
+                        return
+                        
+                    except Exception as e:
+                        # 1Password might not be logged in - show warning instead of error
+                        if "not signed in" in str(e).lower() or "authentication" in str(e).lower():
+                            self.update_status("⚠️ 1Password not authenticated - please sign in via CLI", "warning")
+                            self.log_message(f"1Password authentication required: {str(e)}")
+                        else:
+                            self.update_status(f"⚠️ 1Password error: {str(e)}", "warning")
+                            self.log_message(f"1Password error: {str(e)}")
+                        
+                        # Update configuration status
+                        if hasattr(self, 'config_status_label'):
+                            self.config_status_label.setText("⚠️ 1Password authentication required")
+                            self.config_status_label.setStyleSheet("color: #f59e0b; font-size: 12px;")
+                        
+                        # Continue with setup but mark as not fully connected
+                        self.api_url = api_url
+                        self.session = None
+                        self.gemini_api_key = None
+                        
+                        # Set default values in ingest tab (but don't refresh file list)
+                        self.ingest_folder_edit.setText(default_ingest_folder)
+                        self.notes_folder_edit.setText(default_notes_folder)
+                        self.delete_files_checkbox.setChecked(default_delete_after)
+                        self.model_combo.setCurrentText(default_model)
+                        return
+                    
+                except Exception as e:
+                    # General error loading secrets - show warning
+                    self.update_status(f"⚠️ Configuration warning: {str(e)}", "warning")
+                    self.log_message(f"Configuration warning: {str(e)}")
+                    
+                    # Update configuration status
+                    if hasattr(self, 'config_status_label'):
+                        self.config_status_label.setText(f"⚠️ Configuration warning: {str(e)}")
+                        self.config_status_label.setStyleSheet("color: #f59e0b; font-size: 12px;")
+                    
+                    # Continue with setup but mark as not fully connected
+                    self.api_url = api_url
+                    self.session = None
+                    self.gemini_api_key = None
+                    
+                    # Set default values in ingest tab (but don't refresh file list)
+                    self.ingest_folder_edit.setText(default_ingest_folder)
+                    self.notes_folder_edit.setText(default_notes_folder)
+                    self.delete_files_checkbox.setChecked(default_delete_after)
+                    self.model_combo.setCurrentText(default_model)
+                    return
+            else:
+                # For local encrypted storage
+                try:
+                    obsidian_api_key, self.gemini_api_key = self.config_manager.get_api_keys(self.master_password)
+                except ValueError as e:
+                    self.update_status(f"❌ Configuration incomplete: {str(e)}", "error")
+                    self.log_message(f"Configuration error: {str(e)}")
+                    return
+            
+            # Store API URL
+            self.api_url = api_url
+            
+            # Create API session
+            self.session = create_api_session(obsidian_api_key)
+            
+            # Verify connection
+            verify_connection(self.session, self.api_url, timeout)
+            
+            # Update UI
+            self.update_status("✅ Connected to Obsidian", "success")
+            
+            # Update configuration status to show successful connection
+            if hasattr(self, 'config_status_label'):
+                self.config_status_label.setText("✅ Connected to Obsidian successfully")
+                self.config_status_label.setStyleSheet("color: #10b981; font-size: 13px;")
+            
+            # Set default values in ingest tab (but don't refresh file list)
+            self.ingest_folder_edit.setText(default_ingest_folder)
+            self.notes_folder_edit.setText(default_notes_folder)
+            self.delete_files_checkbox.setChecked(default_delete_after)
+            self.model_combo.setCurrentText(default_model)
             
         except Exception as e:
             self.update_status(f"❌ Connection failed: {str(e)}", "error")
@@ -1191,14 +1496,24 @@ class ObsidianToolsGUI(QMainWindow):
                 }
             """)
             self.status_label.setStyleSheet("color: #991b1b; margin: 0;")
+        elif status_type == "warning":
+            self.status_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #fef3c7;
+                    border: 2px solid #f59e0b;
+                    border-radius: 12px;
+                    padding: 16px;
+                }
+            """)
+            self.status_label.setStyleSheet("color: #92400e; margin: 0;")
         else:
             self.status_frame.setStyleSheet("""
-                                 QFrame {
-                     background-color: #fef3c7;
-                     border: 2px solid #f59e0b;
-                     border-radius: 12px;
-                     padding: 16px;
-                 }
+                QFrame {
+                    background-color: #fef3c7;
+                    border: 2px solid #f59e0b;
+                    border-radius: 12px;
+                    padding: 16px;
+                }
             """)
             self.status_label.setStyleSheet("color: #92400e; margin: 0;")
 
@@ -1217,12 +1532,17 @@ class ObsidianToolsGUI(QMainWindow):
 
     def refresh_file_list(self):
         """Refresh the list of files in the ingest folder."""
-        ingest_folder = self.ingest_folder_edit.text()
-        if not ingest_folder or not os.path.isdir(ingest_folder):
-            self.files_text.setText("Folder not found or invalid")
-            return
-        
         try:
+            # Check if the widgets exist before using them
+            if not hasattr(self, 'ingest_folder_edit') or not hasattr(self, 'files_text'):
+                self.log_message("Warning: Cannot refresh file list - widgets not ready")
+                return
+            
+            ingest_folder = self.ingest_folder_edit.text()
+            if not ingest_folder or not os.path.isdir(ingest_folder):
+                self.files_text.setText("Folder not found or invalid")
+                return
+            
             files = []
             for filename in os.listdir(ingest_folder):
                 file_path = os.path.join(ingest_folder, filename)
@@ -1235,7 +1555,11 @@ class ObsidianToolsGUI(QMainWindow):
             else:
                 self.files_text.setText("No files found in ingest folder")
         except Exception as e:
-            self.files_text.setText(f"Error reading folder: {str(e)}")
+            # Log the error but don't crash
+            if hasattr(self, 'log_output'):
+                self.log_message(f"Error refreshing file list: {str(e)}")
+            if hasattr(self, 'files_text'):
+                self.files_text.setText(f"Error reading folder: {str(e)}")
 
     def run_analysis(self):
         """Run the vault analysis."""
@@ -1436,28 +1760,41 @@ class ObsidianToolsGUI(QMainWindow):
             
             # Load secrets to populate API key fields
             try:
-                secrets = self.config_manager.load_secrets()
-                
                 if security_method == "local_encrypted":
                     # For local encrypted, we can't load the actual keys without master password
                     # But we can show that they exist
-                    if secrets.get("obsidian_api_key"):
-                        self.obsidian_api_key_edit.setText("*** ENCRYPTED ***")
-                    if secrets.get("gemini_api_key"):
-                        self.gemini_api_key_edit.setText("*** ENCRYPTED ***")
+                    try:
+                        secrets = self.config_manager.load_secrets()
+                        if secrets.get("obsidian_api_key"):
+                            self.obsidian_api_key_edit.setText("*** ENCRYPTED ***")
+                        if secrets.get("gemini_api_key"):
+                            self.gemini_api_key_edit.setText("*** ENCRYPTED ***")
+                    except:
+                        # If we can't decrypt, that's okay
+                        pass
                 else:
-                    # For 1Password, load the references
-                    if secrets.get("obsidian_api_key_ref"):
-                        self.obsidian_1p_ref_edit.setText(secrets["obsidian_api_key_ref"])
-                    if secrets.get("gemini_api_key_ref"):
-                        self.gemini_1p_ref_edit.setText(secrets["gemini_api_key_ref"])
+                    # For 1Password, load the references directly from the secrets file
+                    try:
+                        secrets_file = self.config_manager.secrets_file
+                        if secrets_file.exists():
+                            with open(secrets_file, 'r') as f:
+                                saved_secrets = json.load(f)
+                            
+                            # Load 1Password references
+                            if saved_secrets.get("obsidian_api_key_ref"):
+                                self.obsidian_1p_ref_edit.setText(saved_secrets["obsidian_api_key_ref"])
+                            if saved_secrets.get("gemini_api_key_ref"):
+                                self.gemini_1p_ref_edit.setText(saved_secrets["gemini_api_key_ref"])
+                    except Exception as e:
+                        # If we can't load references, that's okay
+                        self.log_message(f"Could not load 1Password references: {str(e)}")
             except Exception as e:
                 # If we can't load secrets, that's okay - they might be encrypted
-                pass
+                self.log_message(f"Could not load secrets: {str(e)}")
             
-            # Update status
-            self.config_status_label.setText("✅ Configuration loaded successfully")
-            self.config_status_label.setStyleSheet("color: #10b981; font-size: 13px;")
+            # Update status - don't show success until connection is actually tested
+            self.config_status_label.setText("Configuration loaded - connection status pending")
+            self.config_status_label.setStyleSheet("color: #6b7280; font-size: 12px;")
             
         except Exception as e:
             self.config_status_label.setText(f"❌ Failed to load configuration: {str(e)}")
@@ -1624,8 +1961,9 @@ class ObsidianToolsGUI(QMainWindow):
             # Test connection
             if self.config_manager.test_connection(api_url, api_key, timeout):
                 QMessageBox.information(self, "Success", "Connection test successful!")
-                self.config_status_label.setText("✅ Connection test successful")
-                self.config_status_label.setStyleSheet("color: #10b981; font-size: 13px;")
+                # Don't update the main status label here - it should reflect the actual app state
+                # Just log the success
+                self.log_message("✅ Connection test successful")
             else:
                 QMessageBox.warning(self, "Connection Failed", "Failed to connect to Obsidian API")
                 self.config_status_label.setText("❌ Connection test failed")
