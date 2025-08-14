@@ -4,3 +4,5 @@ networkx
 pyahocorasick
 google-generativeai
 pypdf
+PyQt6
+cryptography

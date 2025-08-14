@@ -123,11 +123,14 @@ def run_ingest_process(
     gemini_api_key: str,
     timeout: int,
     delete_after_ingest: bool = True,
+    model_name: str = "gemini-2.5-flash",
 ):
     """Orchestrates the file ingestion and note creation process."""
     # Configure the Gemini API and create the model once.
     genai.configure(api_key=gemini_api_key)
-    model = genai.GenerativeModel('gemini-pro')
+    model = genai.GenerativeModel(model_name)
+    
+    logging.info(f"Using Gemini model: {model_name}")
 
     if not os.path.isdir(ingest_folder):
         logging.error(f"Ingest folder not found: {ingest_folder}")

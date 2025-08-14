@@ -98,3 +98,41 @@ python ObsidianAnalyzer.py ingest
 ```bash
 python ObsidianAnalyzer.py ingest --keep-files
 ```
+
+## Graphical User Interface
+
+For a more user-friendly experience, you can use the graphical interface instead of the command line.
+
+### PyQt6 GUI (Recommended)
+
+The PyQt6 version provides a modern, polished interface with better styling and responsiveness:
+
+```bash
+python gui.py
+```
+
+### Tkinter GUI (Alternative)
+
+If you prefer not to install PyQt6, a Tkinter-based GUI is also available:
+
+```bash
+python gui_tkinter.py
+```
+
+### GUI Features
+
+Both GUI versions provide:
+
+- **Tabbed Interface**: Separate tabs for analysis and ingestion
+- **Real-time Progress**: Live logging and progress indicators
+- **Parameter Configuration**: Easy adjustment of analysis thresholds
+- **Folder Selection**: Browse dialogs for selecting input/output folders
+- **File Management**: View files in ingest folder and refresh listings
+- **Results Display**: View analysis results directly in the interface
+- **Error Handling**: Clear error messages and status updates
+
+### VS Code Integration
+
+The project includes VS Code launch configurations for all GUI options:
+- Press `F5` and select "Run: GUI (PyQt6)" for the modern interface
+- Select "Run: GUI (Tkinter)" for the built-in Python interface

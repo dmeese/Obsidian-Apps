@@ -94,6 +94,16 @@ env/
 .project
 .pyre
 
+# Configuration files with secrets
+config/secrets.encrypted
+config/*.key
+*.encrypted
+.env.local
+.env.production
+
+# Keep example configs
+!config/config.example.json
+
 # mypy
 .mypy_cache/
 

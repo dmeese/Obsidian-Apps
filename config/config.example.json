@@ -1,0 +1,33 @@
+{
+  "config": {
+    "obsidian": {
+      "api_url": "http://localhost:27123",
+      "timeout": 30,
+      "default_notes_folder": "GeneratedNotes"
+    },
+    "gemini": {
+      "default_model": "gemini-2.5-flash",
+      "timeout": 60
+    },
+    "ingest": {
+      "default_ingest_folder": "ingest",
+      "delete_after_ingest": true
+    },
+    "security": {
+      "method": "local_encrypted",
+      "encryption_algorithm": "AES-256-GCM"
+    }
+  },
+  "secrets": {
+    "obsidian_api_key": "",
+    "gemini_api_key": "",
+    "obsidian_api_key_ref": "op://vault/item/field",
+    "gemini_api_key_ref": "op://vault/item/field"
+  },
+  "notes": {
+    "This is an example configuration file.",
+    "Copy this to config.json and update the values.",
+    "For 1Password integration, use the op:// references.",
+    "For local encrypted storage, leave the API keys empty."
+  }
+}
