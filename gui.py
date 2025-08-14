@@ -1434,6 +1434,27 @@ class ObsidianToolsGUI(QMainWindow):
             if index >= 0:
                 self.default_gemini_model_combo.setCurrentIndex(index)
             
+            # Load secrets to populate API key fields
+            try:
+                secrets = self.config_manager.load_secrets()
+                
+                if security_method == "local_encrypted":
+                    # For local encrypted, we can't load the actual keys without master password
+                    # But we can show that they exist
+                    if secrets.get("obsidian_api_key"):
+                        self.obsidian_api_key_edit.setText("*** ENCRYPTED ***")
+                    if secrets.get("gemini_api_key"):
+                        self.gemini_api_key_edit.setText("*** ENCRYPTED ***")
+                else:
+                    # For 1Password, load the references
+                    if secrets.get("obsidian_api_key_ref"):
+                        self.obsidian_1p_ref_edit.setText(secrets["obsidian_api_key_ref"])
+                    if secrets.get("gemini_api_key_ref"):
+                        self.gemini_1p_ref_edit.setText(secrets["gemini_api_key_ref"])
+            except Exception as e:
+                # If we can't load secrets, that's okay - they might be encrypted
+                pass
+            
             # Update status
             self.config_status_label.setText("✅ Configuration loaded successfully")
             self.config_status_label.setStyleSheet("color: #10b981; font-size: 13px;")

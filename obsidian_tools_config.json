@@ -1,0 +1,24 @@
+{
+  "config": {
+    "obsidian": {
+      "api_url": "http://localhost:27123",
+      "timeout": 30,
+      "default_notes_folder": "GeneratedNotes"
+    },
+    "gemini": {
+      "default_model": "gemini-2.5-flash-lite",
+      "timeout": 60
+    },
+    "ingest": {
+      "default_ingest_folder": "ingest",
+      "delete_after_ingest": false
+    },
+    "security": {
+      "method": "1password",
+      "encryption_algorithm": "AES-256-GCM"
+    }
+  },
+  "exported_at": "E:\\Coding Projects\\ObsidianTools",
+  "version": "1.0",
+  "secrets": "*** ENCRYPTED ***"
+}

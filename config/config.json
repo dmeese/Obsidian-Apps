@@ -5,12 +5,12 @@
     "default_notes_folder": "GeneratedNotes"
   },
   "gemini": {
-    "default_model": "gemini-2.5-flash",
+    "default_model": "gemini-2.5-flash-lite",
     "timeout": 60
   },
   "ingest": {
     "default_ingest_folder": "ingest",
-    "delete_after_ingest": true
+    "delete_after_ingest": false
   },
   "security": {
     "method": "1password",

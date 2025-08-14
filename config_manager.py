@@ -9,6 +9,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import base64
 import sys
+from datetime import datetime
 
 
 class ConfigEncryption:
@@ -174,7 +175,7 @@ class ConfigManager:
         security_method = config.get("security", {}).get("method", "local_encrypted")
         
         if security_method == "1password":
-            return self._load_1password_secrets()
+            return self._load_1password_secrets(master_password)
         elif security_method == "local_encrypted":
             if not master_password:
                 raise ValueError("Master password required for local encrypted storage")
@@ -202,23 +203,59 @@ class ConfigManager:
             logging.error(f"Failed to load encrypted secrets: {e}")
             raise
     
-    def _load_1password_secrets(self) -> Dict[str, Any]:
+    def _load_1password_secrets(self, master_password: Optional[str] = None) -> Dict[str, Any]:
         """Load secrets from 1Password."""
         try:
             config = self.load_config()
             secrets = self.get_default_secrets()
             
-            # Fetch API keys from 1Password
-            obsidian_ref = os.getenv("OBSIDIAN_API_KEY_REF")
-            gemini_ref = os.getenv("GEMINI_API_KEY_REF")
+            # First try to load saved references from the secrets file
+            if self.secrets_file.exists():
+                try:
+                    # Try to load as encrypted first (in case user switched from local encrypted)
+                    if master_password:
+                        saved_secrets = self._load_encrypted_secrets(master_password)
+                        if saved_secrets.get("obsidian_api_key_ref"):
+                            secrets["obsidian_api_key_ref"] = saved_secrets["obsidian_api_key_ref"]
+                        if saved_secrets.get("gemini_api_key_ref"):
+                            secrets["gemini_api_key_ref"] = saved_secrets["gemini_api_key_ref"]
+                except:
+                    # If that fails, try to load as plain text (for 1Password references)
+                    try:
+                        with open(self.secrets_file, 'r') as f:
+                            saved_secrets = json.load(f)
+                        if saved_secrets.get("obsidian_api_key_ref"):
+                            secrets["obsidian_api_key_ref"] = saved_secrets["obsidian_api_key_ref"]
+                        if saved_secrets.get("gemini_api_key_ref"):
+                            secrets["gemini_api_key_ref"] = saved_secrets["gemini_api_key_ref"]
+                    except:
+                        pass
             
-            if obsidian_ref:
-                secrets["obsidian_api_key"] = self._fetch_1password_secret(obsidian_ref)
-                secrets["obsidian_api_key_ref"] = obsidian_ref
+            # Fallback to environment variables if no saved references
+            if not secrets.get("obsidian_api_key_ref"):
+                obsidian_ref = os.getenv("OBSIDIAN_API_KEY_REF")
+                if obsidian_ref:
+                    secrets["obsidian_api_key_ref"] = obsidian_ref
             
-            if gemini_ref:
-                secrets["gemini_api_key"] = self._fetch_1password_secret(gemini_ref)
-                secrets["gemini_api_key_ref"] = gemini_ref
+            if not secrets.get("gemini_api_key_ref"):
+                gemini_ref = os.getenv("GEMINI_API_KEY_REF")
+                if gemini_ref:
+                    secrets["gemini_api_key_ref"] = gemini_ref
+            
+            # Fetch actual API keys from 1Password if references exist
+            if secrets.get("obsidian_api_key_ref"):
+                try:
+                    secrets["obsidian_api_key"] = self._fetch_1password_secret(secrets["obsidian_api_key_ref"])
+                except Exception as e:
+                    logging.warning(f"Failed to fetch Obsidian API key from 1Password: {e}")
+                    secrets["obsidian_api_key"] = ""
+            
+            if secrets.get("gemini_api_key_ref"):
+                try:
+                    secrets["gemini_api_key"] = self._fetch_1password_secret(secrets["gemini_api_key_ref"])
+                except Exception as e:
+                    logging.warning(f"Failed to fetch Gemini API key from 1Password: {e}")
+                    secrets["gemini_api_key"] = ""
             
             self._secrets_cache = secrets
             return secrets
@@ -270,10 +307,22 @@ class ConfigManager:
             raise
     
     def _save_1password_references(self, secrets: Dict[str, Any]) -> None:
-        """Save 1Password references to environment variables."""
-        # This would typically update environment variables or a separate config
-        # For now, we'll just log the references
-        logging.info("1Password references saved (environment variables should be updated)")
+        """Save 1Password references to the secrets file."""
+        try:
+            # Save only the references (not the actual keys) to the secrets file
+            references_only = {
+                "obsidian_api_key_ref": secrets.get("obsidian_api_key_ref", ""),
+                "gemini_api_key_ref": secrets.get("gemini_api_key_ref", ""),
+                "security_method": "1password"
+            }
+            
+            with open(self.secrets_file, 'w') as f:
+                json.dump(references_only, f, indent=2)
+                
+            logging.info("1Password references saved to secrets file")
+        except Exception as e:
+            logging.error(f"Failed to save 1Password references: {e}")
+            raise
     
     def get_api_keys(self, master_password: Optional[str] = None) -> Tuple[str, str]:
         """Get Obsidian and Gemini API keys."""
@@ -425,7 +474,7 @@ class ConfigManager:
         try:
             export_data = {
                 "config": self.load_config(),
-                "exported_at": str(Path().cwd()),
+                "exported_at": str(datetime.now()),
                 "version": "1.0"
             }
             
