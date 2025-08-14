@@ -68,27 +68,27 @@ class ModernButton(QPushButton):
     
     def _get_font_size(self):
         if self.size == "large":
-            return "15px"  # Reduced from 16px
+            return "14px"  # Reduced from 15px
         elif self.size == "small":
-            return "11px"  # Reduced from 12px
+            return "10px"  # Reduced from 11px
         else:
-            return "13px"  # Reduced from 14px
+            return "12px"  # Reduced from 13px
     
     def _get_padding(self):
         if self.size == "large":
-            return "12px 20px"  # Reduced from 16px 24px
-        elif self.size == "small":
-            return "6px 12px"  # Reduced from 8px 16px
-        else:
             return "10px 16px"  # Reduced from 12px 20px
+        elif self.size == "small":
+            return "5px 10px"  # Reduced from 6px 12px
+        else:
+            return "8px 14px"  # Reduced from 10px 16px
     
     def _get_min_height(self):
         if self.size == "large":
-            return "44px"  # Reduced from 48px
+            return "40px"  # Reduced from 44px
         elif self.size == "small":
-            return "28px"  # Reduced from 32px
+            return "24px"  # Reduced from 28px
         else:
-            return "36px"  # Reduced from 40px
+            return "32px"  # Reduced from 36px
     
     def setup_behavior(self):
         """Setup button behavior and effects."""
@@ -113,9 +113,9 @@ class ModernLineEdit(QLineEdit):
         self.setStyleSheet("""
             QLineEdit {
                 border: 2px solid #e5e7eb;
-                border-radius: 8px;
-                padding: 8px 12px;  /* Reduced from 12px 16px */
-                font-size: 13px;  /* Reduced from 14px */
+                border-radius: 6px;
+                padding: 6px 10px;  /* Reduced from 8px 12px */
+                font-size: 12px;  /* Reduced from 13px */
                 background-color: white;
                 color: #111827;
             }
@@ -436,8 +436,8 @@ class ObsidianToolsGUI(QMainWindow):
     def init_ui(self):
         """Initialize the user interface with modern design."""
         self.setWindowTitle("Obsidian Tools")
-        self.setGeometry(100, 100, 1600, 1000)
-        self.setMinimumSize(1200, 800)
+        self.setGeometry(100, 100, 1000, 1250)  # Increased height to 1250 pixels
+        self.setMinimumSize(800, 1100)  # Increased minimum height accordingly
         
         # Set up the central widget with scroll area for responsiveness
         central_widget = QWidget()
@@ -445,8 +445,8 @@ class ObsidianToolsGUI(QMainWindow):
         
         # Main layout - reduced spacing and margins
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setSpacing(16)  # Reduced from 24
-        main_layout.setContentsMargins(20, 20, 20, 20)  # Reduced from 32
+        main_layout.setSpacing(12)  # Reduced from 16
+        main_layout.setContentsMargins(16, 16, 16, 16)  # Reduced from 20
         
         # Header section
         self.create_header(main_layout)
@@ -459,18 +459,18 @@ class ObsidianToolsGUI(QMainWindow):
         self.tab_widget.setStyleSheet("""
             QTabWidget::pane {
                 border: 2px solid #e5e7eb;
-                border-radius: 12px;
+                border-radius: 8px;
                 background-color: white;
             }
             QTabBar::tab {
                 background-color: #f3f4f6;
                 color: #6b7280;
-                padding: 10px 20px;  /* Reduced from 12px 24px */
-                margin-right: 4px;
-                border-top-left-radius: 8px;
-                border-top-right-radius: 8px;
+                padding: 8px 16px;  /* Reduced from 10px 20px */
+                margin-right: 2px;
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
                 font-weight: 600;
-                font-size: 14px;
+                font-size: 13px;  /* Reduced from 14px */
             }
             QTabBar::tab:selected {
                 background-color: white;
@@ -487,6 +487,7 @@ class ObsidianToolsGUI(QMainWindow):
         # Create tabs
         self.create_analyze_tab()
         self.create_ingest_tab()
+        self.create_web_research_tab()  # New web research tab
         self.create_config_tab()
         
         # Progress area
@@ -498,21 +499,21 @@ class ObsidianToolsGUI(QMainWindow):
         header_frame.setStyleSheet("""
             QFrame {
                 background-color: #f8fafc;
-                border-radius: 16px;
-                padding: 16px;  /* Reduced from 24px */
+                border-radius: 12px;
+                padding: 12px;  /* Reduced from 16px */
             }
         """)
         header_layout = QVBoxLayout(header_frame)
-        header_layout.setSpacing(16)
+        header_layout.setSpacing(12)  # Reduced from 16
         
         # Title
         title_label = QLabel("Obsidian Tools")
         title_label.setStyleSheet("""
             QLabel {
-                font-size: 20px;  /* Reduced from 24px */
+                font-size: 18px;  /* Reduced from 20px */
                 font-weight: 700;
                 color: #111827;
-                margin-bottom: 4px;  /* Reduced from 8px */
+                margin-bottom: 2px;  /* Reduced from 4px */
             }
         """)
         
@@ -520,7 +521,7 @@ class ObsidianToolsGUI(QMainWindow):
         subtitle_label = QLabel("Professional vault analysis and document ingestion")
         subtitle_label.setStyleSheet("""
             QLabel {
-                font-size: 13px;  /* Reduced from 14px */
+                font-size: 12px;  /* Reduced from 13px */
                 color: #6b7280;
                 font-weight: 500;
             }
@@ -538,12 +539,12 @@ class ObsidianToolsGUI(QMainWindow):
             QFrame {
                 background-color: #fef3c7;
                 border: 2px solid #f59e0b;
-                border-radius: 12px;
-                padding: 16px;
+                border-radius: 8px;
+                padding: 12px;
             }
         """)
         status_layout = QHBoxLayout(self.status_frame)
-        status_layout.setContentsMargins(16, 16, 16, 16)
+        status_layout.setContentsMargins(12, 12, 12, 12)
         
         # Status icon (placeholder for now)
         status_icon = QLabel("🔄")
@@ -552,7 +553,7 @@ class ObsidianToolsGUI(QMainWindow):
         
         # Status text
         self.status_label = QLabel("Connecting to Obsidian...")
-        self.status_label.setFont(QFont("Segoe UI", 14, QFont.Weight.Medium))
+        self.status_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Medium))  # Reduced from 14
         self.status_label.setStyleSheet("color: #92400e; margin: 0;")
         status_layout.addWidget(self.status_label)
         
@@ -569,12 +570,8 @@ class ObsidianToolsGUI(QMainWindow):
     def create_progress_section(self, layout):
         """Create the progress section with progress bar and logging."""
         progress_group = ModernGroupBox("Progress & Logs")
-        progress_layout = QHBoxLayout(progress_group)
-        progress_layout.setSpacing(24)
-        
-        # Left side: Progress and status
-        left_progress = QVBoxLayout()
-        left_progress.setSpacing(16)
+        progress_layout = QVBoxLayout(progress_group)  # Changed to vertical layout
+        progress_layout.setSpacing(16)
         
         # Progress bar
         self.progress_bar = QProgressBar()
@@ -594,29 +591,22 @@ class ObsidianToolsGUI(QMainWindow):
                 margin: 2px;
             }
         """)
-        left_progress.addWidget(self.progress_bar)
+        progress_layout.addWidget(self.progress_bar)
         
         # Status info
         status_info = QLabel("Monitor operation progress and view detailed logs below.\n\nProgress bar shows current operation status, while the log displays real-time information.")
         status_info.setWordWrap(True)
-        status_info.setStyleSheet("color: #6b7280; font-size: 12px; line-height: 1.4;")  # Reduced from 13px
-        left_progress.addWidget(status_info)
+        status_info.setStyleSheet("color: #6b7280; font-size: 13px; line-height: 1.5;")  # Increased font size
+        progress_layout.addWidget(status_info)
         
-        left_progress.addStretch()
-        progress_layout.addLayout(left_progress, 1)  # Give it equal space
-        
-        # Right side: Log output
-        right_logs = QVBoxLayout()
-        right_logs.setSpacing(12)  # Reduced from 16
-        
-        # Log output
+        # Log output - full width
         log_label = QLabel("Operation Log")
-        log_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Medium))
+        log_label.setFont(QFont("Segoe UI", 13, QFont.Weight.Medium))  # Increased font size
         log_label.setStyleSheet("color: #374151; margin: 0;")
-        right_logs.addWidget(log_label)
+        progress_layout.addWidget(log_label)
         
         self.log_output = QTextEdit()
-        self.log_output.setMaximumHeight(200)
+        self.log_output.setMinimumHeight(200)  # Changed from maximum to minimum height
         self.log_output.setReadOnly(True)
         self.log_output.setStyleSheet("""
             QTextEdit {
@@ -625,103 +615,94 @@ class ObsidianToolsGUI(QMainWindow):
                 border: 2px solid #374151;
                 border-radius: 8px;
                 font-family: 'Consolas', 'Monaco', monospace;
-                font-size: 12px;
-                padding: 12px;
+                font-size: 13px;  /* Increased font size */
+                padding: 16px;  /* Increased padding */
             }
         """)
-        right_logs.addWidget(self.log_output)
-        
-        progress_layout.addLayout(right_logs, 2)  # Give logs more space
+        progress_layout.addWidget(self.log_output)
         
         layout.addWidget(progress_group)
 
     def create_analyze_tab(self):
         """Create the vault analysis tab with modern design."""
         analyze_widget = QWidget()
-        layout = QHBoxLayout(analyze_widget)  # Changed to horizontal layout
-        layout.setSpacing(16)  # Reduced from 24
-        layout.setContentsMargins(20, 20, 20, 20)  # Reduced from 32
+        layout = QVBoxLayout(analyze_widget)  # Changed back to vertical layout for better proportions
+        layout.setSpacing(16)  # Increased spacing for better breathing room
+        layout.setContentsMargins(20, 20, 20, 20)  # Increased margins
         
-        # Left side: Parameters and Actions
-        left_side = QVBoxLayout()
-        left_side.setSpacing(16)  # Reduced from 24
+        # Top section: Parameters and Actions side by side
+        top_section = QHBoxLayout()
+        top_section.setSpacing(12)  # Reduced spacing between groups for more compact layout
         
-        # Top row: Parameters and Analysis button side by side
-        top_row = QHBoxLayout()
-        top_row.setSpacing(16)  # Reduced from 24
-        
-        # Analysis parameters
+        # Analysis parameters - give it more width
         params_group = ModernGroupBox("Analysis Parameters")
-        params_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        params_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         params_layout = QFormLayout(params_group)
-        params_layout.setSpacing(12)  # Reduced from 16
+        params_layout.setSpacing(6)  # Reduced spacing for more compact layout
         params_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
         
-        # Output file
+        # Make input fields wider by setting minimum width
         self.output_file_edit = ModernLineEdit(placeholder="Enter output filename", initial_text="recommendations.md")
+        self.output_file_edit.setMinimumWidth(250)  # Set minimum width
         params_layout.addRow("Output File:", self.output_file_edit)
         
-        # Hub threshold
         self.hub_threshold_spin = ModernSpinBox(1, 100, 10)
+        self.hub_threshold_spin.setMinimumWidth(120)  # Set minimum width
         params_layout.addRow("Hub Threshold:", self.hub_threshold_spin)
         
-        # Link density threshold
         self.link_density_spin = ModernDoubleSpinBox(0.001, 1.0, 0.02, 3)
+        self.link_density_spin.setMinimumWidth(120)  # Set minimum width
         params_layout.addRow("Link Density Threshold:", self.link_density_spin)
         
-        # Min word count
         self.min_word_count_spin = ModernSpinBox(10, 1000, 50)
+        self.min_word_count_spin.setMinimumWidth(120)  # Set minimum width
         params_layout.addRow("Min Word Count:", self.min_word_count_spin)
         
-        top_row.addWidget(params_group, 1)  # Give it more space
+        top_section.addWidget(params_group, 2)  # Give parameters more space (2 parts)
         
-        # Analysis button and status area
+        # Actions group - more compact
         action_group = ModernGroupBox("Actions")
         action_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         action_layout = QVBoxLayout(action_group)
-        action_layout.setSpacing(12)  # Reduced from 16
+        action_layout.setSpacing(8)  # Reduced spacing for more compact layout
         
         # Analysis button
         self.analyze_button = ModernButton("🔍 Analyze Vault", primary=True, size="large")
         self.analyze_button.clicked.connect(self.run_analysis)
         action_layout.addWidget(self.analyze_button)
         
-        # Add some spacing and status info
+        # Status info
         status_info = QLabel("Click the button above to start vault analysis.\n\nThis will analyze your Obsidian vault and generate recommendations for improving note structure and linking.")
         status_info.setWordWrap(True)
-        status_info.setStyleSheet("color: #6b7280; font-size: 12px; line-height: 1.4;")  # Reduced from 13px
+        status_info.setStyleSheet("color: #6b7280; font-size: 12px; line-height: 1.4;")  # Increased font size
         action_layout.addWidget(status_info)
         
         action_layout.addStretch()
-        top_row.addWidget(action_group, 1)  # Give it equal space
+        top_section.addWidget(action_group, 1)  # Give actions less space (1 part)
         
-        left_side.addLayout(top_row)
-        left_side.addStretch()
+        layout.addLayout(top_section)
         
-        # Add left side to main layout (1 part)
-        layout.addLayout(left_side, 1)
-        
-        # Right side: Results area - takes up half the window
+        # Results area - full width below
         results_group = ModernGroupBox("Analysis Results")
         results_layout = QVBoxLayout(results_group)
         
         self.results_text = QTextEdit()
         self.results_text.setReadOnly(True)
+        self.results_text.setMinimumHeight(300)  # Set minimum height
         self.results_text.setStyleSheet("""
             QTextEdit {
                 background-color: #f8fafc;
                 border: 2px solid #e2e8f0;
                 border-radius: 8px;
                 font-family: 'Segoe UI', sans-serif;
-                font-size: 13px;
-                line-height: 1.5;
-                padding: 16px;
+                font-size: 13px;  /* Increased font size */
+                line-height: 1.5;  /* Increased line height */
+                padding: 16px;  /* Increased padding */
             }
         """)
         results_layout.addWidget(self.results_text)
         
-        # Add right side to main layout (1 part - equal to left side)
-        layout.addWidget(results_group, 1)
+        layout.addWidget(results_group)
         
         self.tab_widget.addTab(analyze_widget, "🔍 Analyze Vault")
 
@@ -729,25 +710,26 @@ class ObsidianToolsGUI(QMainWindow):
         """Create the document ingestion tab with modern design."""
         ingest_widget = QWidget()
         layout = QVBoxLayout(ingest_widget)
-        layout.setSpacing(16)  # Reduced from 24
-        layout.setContentsMargins(20, 20, 20, 20)  # Reduced from 32
+        layout.setSpacing(12)  # Reduced from 16
+        layout.setContentsMargins(16, 16, 16, 16)  # Reduced from 20
         
         # Top section: Folder configuration and options side by side
         top_row = QHBoxLayout()
-        top_row.setSpacing(16)  # Reduced from 24
+        top_row.setSpacing(20)  # Increased spacing
         
-        # Left side: Folder configuration
+        # Left side: Folder configuration - give it more width
         folders_group = ModernGroupBox("Folder Configuration")
-        folders_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        folders_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         folders_layout = QFormLayout(folders_group)
-        folders_layout.setSpacing(12)  # Reduced from 16
+        folders_layout.setSpacing(16)  # Increased spacing
         folders_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
         
         # Ingest folder selection
         ingest_folder_layout = QHBoxLayout()
-        ingest_folder_layout.setSpacing(8)  # Reduced spacing
+        ingest_folder_layout.setSpacing(12)  # Increased spacing
         
         self.ingest_folder_edit = ModernLineEdit(placeholder="Select ingest folder", initial_text="ingest")
+        self.ingest_folder_edit.setMinimumWidth(300)  # Set minimum width
         ingest_folder_layout.addWidget(self.ingest_folder_edit)
         
         self.ingest_folder_button = ModernButton("📁 Browse...", size="small")
@@ -757,9 +739,10 @@ class ObsidianToolsGUI(QMainWindow):
         
         # Notes folder selection
         notes_folder_layout = QHBoxLayout()
-        notes_folder_layout.setSpacing(8)  # Reduced spacing
+        notes_folder_layout.setSpacing(12)  # Increased spacing
         
         self.notes_folder_edit = ModernLineEdit(placeholder="Select notes folder", initial_text="GeneratedNotes")
+        self.notes_folder_edit.setMinimumWidth(300)  # Set minimum width
         notes_folder_layout.addWidget(self.notes_folder_edit)
         
         self.notes_folder_button = ModernButton("📁 Browse...", size="small")
@@ -767,13 +750,13 @@ class ObsidianToolsGUI(QMainWindow):
         notes_folder_layout.addWidget(self.notes_folder_button)
         folders_layout.addRow("Notes Folder:", notes_folder_layout)
         
-        top_row.addWidget(folders_group, 1)  # Give it equal space
+        top_row.addWidget(folders_group, 2)  # Give folders more space (2 parts)
         
-        # Right side: Options and actions
+        # Right side: Options and actions - more compact
         right_group = ModernGroupBox("Options & Actions")
         right_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         right_layout = QVBoxLayout(right_group)
-        right_layout.setSpacing(12)  # Reduced from 16
+        right_layout.setSpacing(16)  # Increased spacing
         
         # Model selection
         model_label = QLabel("🤖 LLM Model:")
@@ -874,6 +857,142 @@ class ObsidianToolsGUI(QMainWindow):
         
         self.tab_widget.addTab(ingest_widget, "📥 Ingest Documents")
 
+    def create_web_research_tab(self):
+        """Create the web research tab with modern design."""
+        research_widget = QWidget()
+        layout = QVBoxLayout(research_widget)
+        layout.setSpacing(12)  # Reduced spacing
+        layout.setContentsMargins(16, 16, 16, 16)  # Reduced margins
+        
+        # Top section: Folder targeting and research options
+        top_row = QHBoxLayout()
+        top_row.setSpacing(20)  # Increased spacing
+        
+        # Left side: Folder targeting - give it more width
+        targeting_group = ModernGroupBox("📁 Folder Targeting")
+        targeting_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        targeting_layout = QFormLayout(targeting_group)
+        targeting_layout.setSpacing(12)  # Increased spacing
+        targeting_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        
+        # Vault folder selection
+        vault_folder_layout = QHBoxLayout()
+        vault_folder_layout.setSpacing(12)  # Increased spacing
+        
+        self.vault_folder_edit = ModernLineEdit(placeholder="Select vault folder to research", initial_text="")
+        self.vault_folder_edit.setMinimumWidth(300)  # Set minimum width
+        vault_folder_layout.addWidget(self.vault_folder_edit)
+        
+        self.vault_folder_button = ModernButton("📁 Browse...", size="small")
+        self.vault_folder_button.clicked.connect(self.select_vault_folder)
+        vault_folder_layout.addWidget(self.vault_folder_button)
+        targeting_layout.addRow("Vault Folder:", vault_folder_layout)
+        
+        # Recursive processing option
+        self.recursive_checkbox = ModernCheckBox("📂 Process subfolders recursively")
+        self.recursive_checkbox.setChecked(True)
+        targeting_layout.addRow("", self.recursive_checkbox)
+        
+        top_row.addWidget(targeting_group, 2)  # Give targeting more space (2 parts)
+        
+        # Right side: Research options - more compact
+        options_group = ModernGroupBox("🔍 Research Options")
+        options_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        options_layout = QVBoxLayout(options_group)
+        options_layout.setSpacing(12)  # Increased spacing
+        
+        # Wikipedia research options
+        self.wikipedia_checkbox = ModernCheckBox("🌐 Enable Wikipedia research")
+        self.wikipedia_checkbox.setChecked(True)
+        options_layout.addWidget(self.wikipedia_checkbox)
+        
+        # Max articles per note
+        max_articles_layout = QHBoxLayout()
+        max_articles_layout.setSpacing(8)
+        
+        max_articles_label = QLabel("Max articles per note:")
+        max_articles_label.setFont(QFont("Segoe UI", 11, QFont.Weight.Medium))
+        max_articles_label.setStyleSheet("color: #374151; margin: 0;")
+        max_articles_layout.addWidget(max_articles_label)
+        
+        self.max_articles_spin = ModernSpinBox(1, 10, 3)
+        max_articles_layout.addWidget(self.max_articles_spin)
+        
+        options_layout.addLayout(max_articles_layout)
+        
+        # Backup original notes
+        self.backup_original_checkbox = ModernCheckBox("💾 Backup original notes before enhancement")
+        self.backup_original_checkbox.setChecked(True)
+        options_layout.addWidget(self.backup_original_checkbox)
+        
+        options_layout.addStretch()
+        top_row.addWidget(options_group, 1)
+        
+        layout.addLayout(top_row)
+        
+        # Research actions
+        actions_group = ModernGroupBox("🚀 Research Actions")
+        actions_layout = QVBoxLayout(actions_group)
+        actions_layout.setSpacing(12)
+        
+        # Research button
+        self.research_button = ModernButton("🔍 Start Research", primary=True, size="large")
+        self.research_button.clicked.connect(self.start_web_research)
+        actions_layout.addWidget(self.research_button)
+        
+        # Status info
+        research_info = QLabel("Select a folder in your Obsidian vault to research and enhance notes with Wikipedia content.\n\nThis will add research context, citations, and enhanced wikilinks to your notes.")
+        research_info.setWordWrap(True)
+        research_info.setStyleSheet("color: #6b7280; font-size: 11px; line-height: 1.3;")
+        actions_layout.addWidget(research_info)
+        
+        actions_layout.addStretch()
+        layout.addWidget(actions_group)
+        
+        # Research progress and results
+        results_group = ModernGroupBox("📊 Research Progress & Results")
+        results_layout = QVBoxLayout(results_group)
+        
+        # Progress bar for research
+        self.research_progress_bar = QProgressBar()
+        self.research_progress_bar.setVisible(False)
+        self.research_progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #e5e7eb;
+                border-radius: 6px;
+                text-align: center;
+                font-weight: 600;
+                color: #111827;
+                background-color: #f9fafb;
+            }
+            QProgressBar::chunk {
+                background-color: #10b981;
+                border-radius: 4px;
+                margin: 2px;
+            }
+        """)
+        results_layout.addWidget(self.research_progress_bar)
+        
+        # Research results text
+        self.research_results_text = QTextEdit()
+        self.research_results_text.setReadOnly(True)
+        self.research_results_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #f8fafc;
+                border: 2px solid #e2e8f0;
+                border-radius: 6px;
+                font-family: 'Segoe UI', sans-serif;
+                font-size: 11px;
+                line-height: 1.3;
+                padding: 12px;
+            }
+        """)
+        results_layout.addWidget(self.research_results_text)
+        
+        layout.addWidget(results_group)
+        
+        self.tab_widget.addTab(research_widget, "🌐 Web Research")
+
     def create_config_tab(self):
         """Create the configuration tab with modern design and scroll capability."""
         config_widget = QWidget()
@@ -957,6 +1076,49 @@ class ObsidianToolsGUI(QMainWindow):
         security_layout.addLayout(self.master_password_layout)
         
         layout.addWidget(security_group)
+        
+        # Configuration status - moved to top
+        status_group = ModernGroupBox("Configuration Status")
+        status_layout = QVBoxLayout(status_group)
+        
+        self.config_status_label = QLabel("Configuration not loaded")
+        self.config_status_label.setStyleSheet("color: #6b7280; font-size: 12px;")  # Reduced from 13px
+        status_layout.addWidget(self.config_status_label)
+        
+        layout.addWidget(status_group)
+        
+        # Action buttons - moved to top
+        actions_group = ModernGroupBox("Configuration Actions")
+        actions_layout = QHBoxLayout(actions_group)
+        actions_layout.setSpacing(12)  # Reduced from 16
+        
+        # Test connection button
+        self.test_connection_button = ModernButton("🔗 Test Connection", size="medium")
+        self.test_connection_button.clicked.connect(self.test_connection)
+        actions_layout.addWidget(self.test_connection_button)
+        
+        # Save configuration button
+        self.save_config_button = ModernButton("💾 Save Configuration", primary=True, size="medium")
+        self.save_config_button.clicked.connect(self.save_configuration)
+        actions_layout.addWidget(self.save_config_button)
+        
+        # Load configuration button
+        self.load_config_button = ModernButton("📂 Load Configuration", size="medium")
+        self.load_config_button.clicked.connect(self.load_configuration)
+        actions_layout.addWidget(self.load_config_button)
+        
+        # Export configuration button
+        self.export_config_button = ModernButton("📤 Export Config", size="medium")
+        self.export_config_button.clicked.connect(self.export_configuration)
+        actions_layout.addWidget(self.export_config_button)
+        
+        # Import configuration button
+        self.import_config_button = ModernButton("📥 Import Config", size="medium")
+        self.import_config_button.clicked.connect(self.import_configuration)
+        actions_layout.addWidget(self.import_config_button)
+        
+        actions_layout.addStretch()
+        layout.addWidget(actions_group)
         
         # Connection settings
         connection_group = ModernGroupBox("Connection Settings")
@@ -1057,49 +1219,6 @@ class ObsidianToolsGUI(QMainWindow):
         ingest_config_layout.addRow("Default Gemini Model:", self.default_gemini_model_combo)
         
         layout.addWidget(ingest_config_group)
-        
-        # Action buttons
-        actions_group = ModernGroupBox("Configuration Actions")
-        actions_layout = QHBoxLayout(actions_group)
-        actions_layout.setSpacing(12)  # Reduced from 16
-        
-        # Test connection button
-        self.test_connection_button = ModernButton("🔗 Test Connection", size="medium")
-        self.test_connection_button.clicked.connect(self.test_connection)
-        actions_layout.addWidget(self.test_connection_button)
-        
-        # Save configuration button
-        self.save_config_button = ModernButton("💾 Save Configuration", primary=True, size="medium")
-        self.save_config_button.clicked.connect(self.save_configuration)
-        actions_layout.addWidget(self.save_config_button)
-        
-        # Load configuration button
-        self.load_config_button = ModernButton("📂 Load Configuration", size="medium")
-        self.load_config_button.clicked.connect(self.load_configuration)
-        actions_layout.addWidget(self.load_config_button)
-        
-        # Export configuration button
-        self.export_config_button = ModernButton("📤 Export Config", size="medium")
-        self.export_config_button.clicked.connect(self.export_configuration)
-        actions_layout.addWidget(self.export_config_button)
-        
-        # Import configuration button
-        self.import_config_button = ModernButton("📥 Import Config", size="medium")
-        self.import_config_button.clicked.connect(self.import_configuration)
-        actions_layout.addWidget(self.import_config_button)
-        
-        actions_layout.addStretch()
-        layout.addWidget(actions_group)
-        
-        # Configuration status
-        status_group = ModernGroupBox("Configuration Status")
-        status_layout = QVBoxLayout(status_group)
-        
-        self.config_status_label = QLabel("Configuration not loaded")
-        self.config_status_label.setStyleSheet("color: #6b7280; font-size: 12px;")  # Reduced from 13px
-        status_layout.addWidget(self.config_status_label)
-        
-        layout.addWidget(status_group)
         
         # Set the content widget as the scroll area's widget
         scroll_area.setWidget(content_widget)
@@ -1529,6 +1648,48 @@ class ObsidianToolsGUI(QMainWindow):
         folder = QFileDialog.getExistingDirectory(self, "Select Notes Folder")
         if folder:
             self.notes_folder_edit.setText(folder)
+
+    def select_vault_folder(self):
+        """Open folder dialog to select vault folder for research."""
+        folder = QFileDialog.getExistingDirectory(self, "Select Vault Folder to Research")
+        if folder:
+            self.vault_folder_edit.setText(folder)
+
+    def start_web_research(self):
+        """Start the web research process."""
+        if not self.vault_folder_edit.text().strip():
+            QMessageBox.warning(self, "Warning", "Please select a vault folder to research.")
+            return
+        
+        if not self.wikipedia_checkbox.isChecked():
+            QMessageBox.warning(self, "Warning", "Please enable at least one research source.")
+            return
+        
+        # Disable button and show progress
+        self.research_button.setEnabled(False)
+        self.research_progress_bar.setVisible(True)
+        self.research_progress_bar.setRange(0, 0)  # Indeterminate progress
+        
+        # Clear previous results
+        self.research_results_text.clear()
+        
+        # Log start of research
+        self.log_message("Starting web research...")
+        self.research_results_text.append("🔍 Starting web research...\n")
+        
+        # TODO: Implement actual web research functionality
+        # For now, just show a placeholder message
+        self.research_results_text.append("✅ Web research tab is ready!\n")
+        self.research_results_text.append("📁 Selected folder: " + self.vault_folder_edit.text() + "\n")
+        self.research_results_text.append("🌐 Wikipedia research: " + ("Enabled" if self.wikipedia_checkbox.isChecked() else "Disabled") + "\n")
+        self.research_results_text.append("📊 Max articles per note: " + str(self.max_articles_spin.value()) + "\n")
+        self.research_results_text.append("💾 Backup original notes: " + ("Yes" if self.backup_original_checkbox.isChecked() else "No") + "\n")
+        
+        # Re-enable button and hide progress
+        self.research_button.setEnabled(True)
+        self.research_progress_bar.setVisible(False)
+        
+        self.log_message("Web research completed (placeholder implementation)")
 
     def refresh_file_list(self):
         """Refresh the list of files in the ingest folder."""
