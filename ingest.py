@@ -9,6 +9,40 @@ import google.generativeai as genai
 from pypdf import PdfReader
 from typing import List, Dict, TypedDict, Literal
 
+# Add secure logging function
+def secure_log(level: str, message: str, sensitive_data: Dict[str, str] = None) -> None:
+    """
+    Secure logging function that redacts sensitive information.
+    
+    Args:
+        level: Log level (info, warning, error, debug)
+        message: Log message
+        sensitive_data: Dict of sensitive values to redact (e.g., {"api_key": "actual_key"})
+    """
+    if sensitive_data:
+        redacted_message = message
+        for key, value in sensitive_data.items():
+            if value and len(value) > 8:  # Only redact if value exists and is long enough
+                # Redact all but first 4 and last 4 characters
+                redacted_value = value[:4] + "*" * (len(value) - 8) + value[-4:]
+                redacted_message = redacted_message.replace(value, redacted_value)
+            elif value:
+                # For short values, redact completely
+                redacted_message = redacted_message.replace(value, "*" * len(value))
+    else:
+        redacted_message = message
+    
+    # Use the appropriate logging method
+    logger = logging.getLogger(__name__)
+    if level.lower() == "info":
+        logger.info(redacted_message)
+    elif level.lower() == "warning":
+        logger.warning(redacted_message)
+    elif level.lower() == "error":
+        logger.error(redacted_message)
+    elif level.lower() == "debug":
+        logger.debug(redacted_message)
+
 
 class Note(TypedDict):
     """Represents a note with title, content, and type."""
@@ -19,7 +53,7 @@ class Note(TypedDict):
 
 def read_file_content(file_path: str) -> str:
     """Reads content from a .txt or .pdf file."""
-    logging.info(f"Reading content from {file_path}...")
+    secure_log("info", f"Reading content from {file_path}...")
     try:
         if file_path.lower().endswith(".txt"):
             with open(file_path, "r", encoding="utf-8") as f:
@@ -31,10 +65,10 @@ def read_file_content(file_path: str) -> str:
                 text += page.extract_text() + "\n"
             return text
         else:
-            logging.warning(f"Unsupported file type: {file_path}. Skipping.")
+            secure_log("warning", f"Unsupported file type: {file_path}. Skipping.")
             return ""
     except Exception as e:
-        logging.error(f"Failed to read file {file_path}: {e}")
+        secure_log("error", f"Failed to read file {file_path}: {e}")
         return ""
 
 
@@ -72,10 +106,10 @@ def analyze_with_gemini(model, text_content: str) -> List[Note]:
     evergreen-style notes for Obsidian.
     """
     if not text_content.strip():
-        logging.warning("Skipping Gemini analysis for empty content.")
+        secure_log("warning", "Skipping Gemini analysis for empty content.")
         return []
 
-    logging.info("Sending content to Gemini for analysis. This may take a moment...")
+    secure_log("info", "Sending content to Gemini for analysis. This may take a moment...")
 
     # --- START OF REVISED PROMPT ---
     prompt = f"""
@@ -126,12 +160,12 @@ def analyze_with_gemini(model, text_content: str) -> List[Note]:
         try:
             return json.loads(cleaned_response)
         except json.JSONDecodeError:
-            logging.error("Failed to parse JSON response from Gemini.")
-            logging.debug(f"Invalid JSON received: {cleaned_response}")
-            return []
+                    secure_log("error", "Failed to parse JSON response from Gemini.")
+        secure_log("debug", f"Invalid JSON received: {cleaned_response}")
+        return []
 
     except Exception as e:
-        logging.error(f"An error occurred during Gemini API call: {e}")
+        secure_log("error", f"An error occurred during Gemini API call: {e}")
         return []
 
 
@@ -144,17 +178,17 @@ def create_notes_in_vault(
 ):
     """Creates new notes in the Obsidian vault using the API."""
     if not notes_to_create:
-        logging.info("No new notes to create.")
+        secure_log("info", "No new notes to create.")
         return
 
-    logging.info(f"Creating {len(notes_to_create)} new notes in vault...")
+    secure_log("info", f"Creating {len(notes_to_create)} new notes in vault...")
     for note in notes_to_create:
         title = note.get("title")
         content = note.get("content")
         note_type = note.get("type", "atomic")  # Default to atomic if type is missing
 
         if not title or not content:
-            logging.warning(f"Skipping note with missing title or content: {note}")
+            secure_log("warning", f"Skipping note with missing title or content: {note}")
             continue
 
         # Clean wikilinks to remove quotes and ensure proper format
@@ -163,16 +197,16 @@ def create_notes_in_vault(
         
         # Log if any wikilinks were cleaned
         if original_content != content:
-            logging.info(f"Cleaned wikilinks in note '{title}'")
+            secure_log("info", f"Cleaned wikilinks in note '{title}'")
         
-        logging.info(f"Creating {note_type} note: {title}")
+        secure_log("info", f"Creating {note_type} note: {title}")
 
         # Sanitize title to create a valid filename
         sanitized_title = re.sub(r'[\\/*?:"<>|]', "", title)
         note_path = os.path.join(output_folder, f"{sanitized_title}.md").replace("\\", "/")
 
         try:
-            logging.info(f"Creating note: {note_path}")
+            secure_log("info", f"Creating note: {note_path}")
             encoded_path = urllib.parse.quote(note_path)
             response = session.put(
                 f"{api_url}/vault/{encoded_path}",
@@ -185,12 +219,12 @@ def create_notes_in_vault(
             # Log connectivity information
             wikilinks = re.findall(r'\[\[([^\]]+)\]\]', content)
             if wikilinks:
-                logging.info(f"Note '{title}' contains {len(wikilinks)} wikilinks: {', '.join(wikilinks)}")
+                secure_log("info", f"Note '{title}' contains {len(wikilinks)} wikilinks: {', '.join(wikilinks)}")
             else:
-                logging.info(f"Note '{title}' has no wikilinks")
+                secure_log("info", f"Note '{title}' has no wikilinks")
                 
         except requests.exceptions.RequestException as e:
-            logging.error(f"Failed to create note '{note_path}': {e}")
+            secure_log("error", f"Failed to create note '{note_path}': {e}")
 
 
 def run_ingest_process(
@@ -208,10 +242,10 @@ def run_ingest_process(
     genai.configure(api_key=gemini_api_key)
     model = genai.GenerativeModel(model_name)
     
-    logging.info(f"Using Gemini model: {model_name}")
+    secure_log("info", f"Using Gemini model: {model_name}")
 
     if not os.path.isdir(ingest_folder):
-        logging.error(f"Ingest folder not found: {ingest_folder}")
+        secure_log("error", f"Ingest folder not found: {ingest_folder}")
         sys.exit(1)
 
     processed_files = []
@@ -221,10 +255,10 @@ def run_ingest_process(
         file_path = os.path.join(ingest_folder, filename)
         if os.path.isfile(file_path):
             try:
-                logging.info(f"Processing file: {filename}")
+                secure_log("info", f"Processing file: {filename}")
                 content = read_file_content(file_path)
                 if not content:
-                    logging.warning(f"Skipping {filename} due to empty content")
+                    secure_log("warning", f"Skipping {filename} due to empty content")
                     failed_files.append(file_path)
                     continue
                 
@@ -235,34 +269,34 @@ def run_ingest_process(
                     structure_count = sum(1 for note in decomposed_notes if note.get("type") == "structure")
                     total_wikilinks = sum(len(re.findall(r'\[\[([^\]]+)\]\]', note.get("content", ""))) for note in decomposed_notes)
                     
-                    logging.info(f"Generated {len(decomposed_notes)} notes from {filename}:")
-                    logging.info(f"  - {atomic_count} atomic notes")
-                    logging.info(f"  - {structure_count} structure notes")
-                    logging.info(f"  - {total_wikilinks} total wikilinks for connectivity")
+                    secure_log("info", f"Generated {len(decomposed_notes)} notes from {filename}:")
+                    secure_log("info", f"  - {atomic_count} atomic notes")
+                    secure_log("info", f"  - {structure_count} structure notes")
+                    secure_log("info", f"  - {total_wikilinks} total wikilinks for connectivity")
                     
                     create_notes_in_vault(session, api_url, decomposed_notes, notes_folder, timeout)
                     processed_files.append(file_path)
-                    logging.info(f"Successfully processed {filename}")
+                    secure_log("info", f"Successfully processed {filename}")
                 else:
-                    logging.warning(f"No notes generated from {filename}")
+                    secure_log("warning", f"No notes generated from {filename}")
                     failed_files.append(file_path)
             except Exception as e:
-                logging.error(f"Failed to process {filename}: {e}")
+                secure_log("error", f"Failed to process {filename}: {e}")
                 failed_files.append(file_path)
 
     # Delete successfully processed files if requested
     if delete_after_ingest and processed_files:
-        logging.info(f"Deleting {len(processed_files)} successfully processed files...")
+        secure_log("info", f"Deleting {len(processed_files)} successfully processed files...")
         for file_path in processed_files:
             try:
                 os.remove(file_path)
-                logging.debug(f"Deleted: {file_path}")
+                secure_log("debug", f"Deleted: {file_path}")
             except OSError as e:
-                logging.error(f"Failed to delete {file_path}: {e}")
+                secure_log("error", f"Failed to delete {file_path}: {e}")
         
-        logging.info(f"Successfully deleted {len(processed_files)} files from ingest folder")
+        secure_log("info", f"Successfully deleted {len(processed_files)} files from ingest folder")
     
     if failed_files:
-        logging.warning(f"{len(failed_files)} files failed processing and were not deleted")
+        secure_log("warning", f"{len(failed_files)} files failed processing and were not deleted")
         for file_path in failed_files:
-            logging.debug(f"Failed file: {file_path}")
+            secure_log("debug", f"Failed file: {file_path}")

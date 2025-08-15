@@ -320,6 +320,10 @@ The updated ingestion system creates interconnected notes that form knowledge ne
 - **AES-256 Encryption**: Military-grade encryption for local secrets
 - **PBKDF2 Key Derivation**: 600,000 iterations for enhanced security
 - **Git Security**: Automatic exclusion of sensitive files from version control
+- **Secure Logging**: Comprehensive redaction of sensitive information in all logs
+- **No Clear Text Secrets**: API keys and passwords are never logged in plain text
+
+For detailed security information, see [SECURITY.md](SECURITY.md).
 
 #### ⚙️ Configuration System
 - **Centralized Management**: All settings managed through the GUI

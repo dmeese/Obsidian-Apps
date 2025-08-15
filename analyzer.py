@@ -9,12 +9,46 @@ import ahocorasick
 import networkx as nx
 from typing import List, Dict, Any
 
+# Add secure logging function
+def secure_log(level: str, message: str, sensitive_data: Dict[str, str] = None) -> None:
+    """
+    Secure logging function that redacts sensitive information.
+    
+    Args:
+        level: Log level (info, warning, error, debug)
+        message: Log message
+        sensitive_data: Dict of sensitive values to redact (e.g., {"api_key": "actual_key"})
+    """
+    if sensitive_data:
+        redacted_message = message
+        for key, value in sensitive_data.items():
+            if value and len(value) > 8:  # Only redact if value exists and is long enough
+                # Redact all but first 4 and last 4 characters
+                redacted_value = value[:4] + "*" * (len(value) - 8) + value[-4:]
+                redacted_message = redacted_message.replace(value, redacted_value)
+            elif value:
+                # For short values, redact completely
+                redacted_message = redacted_message.replace(value, "*" * len(value))
+    else:
+        redacted_message = message
+    
+    # Use the appropriate logging method
+    logger = logging.getLogger(__name__)
+    if level.lower() == "info":
+        logger.info(redacted_message)
+    elif level.lower() == "warning":
+        logger.warning(redacted_message)
+    elif level.lower() == "error":
+        logger.error(redacted_message)
+    elif level.lower() == "debug":
+        logger.debug(redacted_message)
+
 WIKILINK_RE = re.compile(r"\[\[([^|\]]+)")
 
 
 def fetch_all_notes(session, api_url: str, timeout: int) -> List[str]:
     """Fetches a list of all markdown files by recursively traversing the vault."""
-    logging.info("Fetching all notes by recursively traversing the vault...")
+    secure_log("info", "Fetching all notes by recursively traversing the vault...")
 
     all_markdown_files: set[str] = set()
     # The queue will store directory paths WITHOUT trailing slashes.
@@ -28,7 +62,7 @@ def fetch_all_notes(session, api_url: str, timeout: int) -> List[str]:
             continue
         scanned_dirs.add(current_dir_no_slash)
 
-        logging.debug(f"Scanning directory: '{current_dir_no_slash if current_dir_no_slash else '/'}'")
+        secure_log("debug", f"Scanning directory: '{current_dir_no_slash if current_dir_no_slash else '/'}'")
         try:
             encoded_path = urllib.parse.quote(current_dir_no_slash)
 
@@ -49,16 +83,16 @@ def fetch_all_notes(session, api_url: str, timeout: int) -> List[str]:
                 elif full_item_path.endswith(".md"):
                     all_markdown_files.add(full_item_path)
         except requests.exceptions.RequestException as e:
-            logging.error(f"Error fetching contents of directory '{current_dir_no_slash}/': {e}")
+            secure_log("error", f"Error fetching contents of directory '{current_dir_no_slash}/': {e}")
             continue
 
     if not all_markdown_files:
-        logging.warning("No markdown notes found in the vault.")
+        secure_log("warning", "No markdown notes found in the vault.")
         sys.exit(0)
 
     final_list = sorted(list(all_markdown_files))
-    logging.info(f"Found {len(final_list)} markdown notes.")
-    logging.debug(f"Full list of markdown files found: {final_list}")
+    secure_log("info", f"Found {len(final_list)} markdown notes.")
+    secure_log("debug", f"Full list of markdown files found: {final_list}")
     return final_list
 
 
@@ -66,7 +100,7 @@ def build_note_graph(
     session, api_url: str, markdown_files: List[str], timeout: int
 ) -> nx.DiGraph:
     """Builds a directed graph of notes and their links."""
-    logging.info(f"Building note graph for {len(markdown_files)} files...")
+    secure_log("info", f"Building note graph for {len(markdown_files)} files...")
     graph = nx.DiGraph()
 
     # Map from full link path (e.g., "Folder/Note") to full file path ("Folder/Note.md")
@@ -84,7 +118,7 @@ def build_note_graph(
         basename_map[basename].append(note_path)
 
     for i, note_path in enumerate(markdown_files):
-        logging.debug(f"Processing note {i + 1}/{len(markdown_files)}: {note_path}")
+        secure_log("debug", f"Processing note {i + 1}/{len(markdown_files)}: {note_path}")
         try:
             # Per API docs, use the /vault/{filename} endpoint to get note content.
             encoded_note_path = urllib.parse.quote(note_path)
@@ -115,9 +149,9 @@ def build_note_graph(
                         graph.add_node(link_target, type="stub")
                     graph.add_edge(note_path, link_target)
         except requests.exceptions.RequestException as e:
-            logging.warning(f"Could not fetch content for '{note_path}': {e}")
+            secure_log("warning", f"Could not fetch content for '{note_path}': {e}")
 
-    logging.info("Graph construction complete.")
+    secure_log("info", "Graph construction complete.")
     return graph
 
 
@@ -125,7 +159,7 @@ def analyze_graph(
     graph: nx.DiGraph, hub_threshold: int, link_density_threshold: float, min_word_count: int
 ) -> Dict[str, Any]:
     """Analyzes the graph to find orphans, stubs, and their sources."""
-    logging.info("Analyzing note graph...")
+    secure_log("info", "Analyzing note graph...")
     all_nodes = list(graph.nodes(data=True))
     notes = [n for n, d in all_nodes if d.get("type") == "note"]
     stubs = [n for n, d in all_nodes if d.get("type") == "stub"]
@@ -271,11 +305,11 @@ def run_analysis_process(
         graph, hub_threshold, link_density_threshold, min_word_count
     )
 
-    logging.info(f"Writing report to {output_file}...")
+    secure_log("info", f"Writing report to {output_file}...")
     try:
         with open(output_file, "w", encoding="utf-8") as f:
             print_report(analysis, hub_threshold=hub_threshold, output_stream=f)
-        logging.info(f"Report successfully written to {output_file}")
+        secure_log("info", f"Report successfully written to {output_file}")
     except IOError as e:
-        logging.error(f"Could not write report to file {output_file}: {e}")
+        secure_log("error", f"Could not write report to file {output_file}: {e}")
         sys.exit(1)

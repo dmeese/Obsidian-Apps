@@ -10,9 +10,43 @@ import time
 import logging
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 import json
 import re
+
+# Add secure logging function
+def secure_log(level: str, message: str, sensitive_data: Dict[str, str] = None) -> None:
+    """
+    Secure logging function that redacts sensitive information.
+    
+    Args:
+        level: Log level (info, warning, error, debug)
+        message: Log message
+        sensitive_data: Dict of sensitive values to redact (e.g., {"api_key": "actual_key"})
+    """
+    if sensitive_data:
+        redacted_message = message
+        for key, value in sensitive_data.items():
+            if value and len(value) > 8:  # Only redact if value exists and is long enough
+                # Redact all but first 4 and last 4 characters
+                redacted_value = value[:4] + "*" * (len(value) - 8) + value[-4:]
+                redacted_message = redacted_message.replace(value, redacted_value)
+            elif value:
+                # For short values, redact completely
+                redacted_message = redacted_message.replace(value, "*" * len(value))
+    else:
+        redacted_message = message
+    
+    # Use the appropriate logging method
+    logger = logging.getLogger(__name__)
+    if level.lower() == "info":
+        logger.info(redacted_message)
+    elif level.lower() == "warning":
+        logger.warning(redacted_message)
+    elif level.lower() == "error":
+        logger.error(redacted_message)
+    elif level.lower() == "debug":
+        logger.debug(redacted_message)
 
 
 @dataclass
@@ -77,7 +111,7 @@ class WikipediaHandler:
         if len(self.request_times) >= self.rate_limit_per_minute:
             sleep_time = 60 - (current_time - self.request_times[0])
             if sleep_time > 0:
-                self.logger.info(f"Rate limit reached, waiting {sleep_time:.1f} seconds")
+                secure_log("info", f"Rate limit reached, waiting {sleep_time:.1f} seconds")
                 time.sleep(sleep_time)
         
         # Record this request
@@ -92,7 +126,7 @@ class WikipediaHandler:
             response.raise_for_status()
             return response
         except requests.exceptions.RequestException as e:
-            self.logger.error(f"Request failed: {e}")
+            secure_log("error", f"Request failed: {e}")
             return None
     
     def generate_search_queries(self, note_content: str, note_title: str) -> List[str]:
@@ -136,7 +170,7 @@ class WikipediaHandler:
                 return [q.strip() for q in queries if q.strip()]
             
         except Exception as e:
-            self.logger.warning(f"LLM query generation failed: {e}")
+            secure_log("warning", f"LLM query generation failed: {e}")
         
         # Fallback to simple keyword extraction
         return self._fallback_query_generation(note_content, note_title)
@@ -205,7 +239,7 @@ class WikipediaHandler:
             return results
             
         except (json.JSONDecodeError, KeyError) as e:
-            self.logger.error(f"Failed to parse search results: {e}")
+            secure_log("error", f"Failed to parse search results: {e}")
             return []
     
     def get_article_content(self, page_id: int) -> Optional[WikipediaArticle]:
@@ -241,7 +275,7 @@ class WikipediaHandler:
             page_data = pages.get(str(page_id))
             
             if not page_data:
-                self.logger.warning(f"No page data found for page ID {page_id}")
+                secure_log("warning", f"No page data found for page ID {page_id}")
                 return None
             
             # Extract basic information
@@ -284,7 +318,7 @@ class WikipediaHandler:
             return article
             
         except (json.JSONDecodeError, KeyError) as e:
-            self.logger.error(f"Failed to parse article content: {e}")
+            secure_log("error", f"Failed to parse article content: {e}")
             return None
     
     def _get_content_sections(self, page_id: int) -> List[Dict[str, str]]:
@@ -351,7 +385,7 @@ class WikipediaHandler:
             return cleaned_sections
             
         except Exception as e:
-            self.logger.error(f"Failed to extract content sections: {e}")
+            secure_log("error", f"Failed to extract content sections: {e}")
             return []
     
     def _extract_references_and_citations(self, page_id: int) -> Tuple[List[str], List[Dict[str, str]]]:
@@ -443,7 +477,7 @@ class WikipediaHandler:
             return references, citations
             
         except Exception as e:
-            self.logger.error(f"Failed to extract references: {e}")
+            secure_log("error", f"Failed to extract references: {e}")
             return [], []
     
     def calculate_relevance_score(self, article: WikipediaArticle, note_content: str) -> float:
@@ -497,11 +531,11 @@ class WikipediaHandler:
         Returns:
             List of relevant Wikipedia articles
         """
-        self.logger.info(f"Researching note: {note_title}")
+        secure_log("info", f"Researching note: {note_title}")
         
         # Generate search queries
         queries = self.generate_search_queries(note_content, note_title)
-        self.logger.info(f"Generated queries: {queries}")
+        secure_log("info", f"Generated queries: {queries}")
         
         all_articles = []
         

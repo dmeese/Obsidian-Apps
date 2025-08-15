@@ -4,7 +4,41 @@ import logging
 import subprocess
 import requests
 from dotenv import load_dotenv
-from typing import Tuple
+from typing import Tuple, Dict
+
+# Add secure logging function
+def secure_log(level: str, message: str, sensitive_data: Dict[str, str] = None) -> None:
+    """
+    Secure logging function that redacts sensitive information.
+    
+    Args:
+        level: Log level (info, warning, error, debug)
+        message: Log message
+        sensitive_data: Dict of sensitive values to redact (e.g., {"api_key": "actual_key"})
+    """
+    if sensitive_data:
+        redacted_message = message
+        for key, value in sensitive_data.items():
+            if value and len(value) > 8:  # Only redact if value exists and is long enough
+                # Redact all but first 4 and last 4 characters
+                redacted_value = value[:4] + "*" * (len(value) - 8) + value[-4:]
+                redacted_message = redacted_message.replace(value, redacted_value)
+            elif value:
+                # For short values, redact completely
+                redacted_message = redacted_message.replace(value, "*" * len(value))
+    else:
+        redacted_message = message
+    
+    # Use the appropriate logging method
+    logger = logging.getLogger(__name__)
+    if level.lower() == "info":
+        logger.info(redacted_message)
+    elif level.lower() == "warning":
+        logger.warning(redacted_message)
+    elif level.lower() == "error":
+        logger.error(redacted_message)
+    elif level.lower() == "debug":
+        logger.debug(redacted_message)
 
 
 def load_config() -> Tuple[str, str, str, str]:
@@ -14,7 +48,7 @@ def load_config() -> Tuple[str, str, str, str]:
     dotenv_path = os.path.join(project_root, ".vscode", ".env")
 
     if not os.path.exists(dotenv_path):
-        logging.error(f"Configuration file not found at '{dotenv_path}'")
+        secure_log("error", f"Configuration file not found at '{dotenv_path}'")
         sys.exit(1)
 
     load_dotenv(dotenv_path=dotenv_path)
@@ -31,9 +65,9 @@ def load_config() -> Tuple[str, str, str, str]:
     }
     missing_vars = [var for var, value in required_vars.items() if not value]
     if missing_vars:
-        logging.error("The following required environment variables are missing from your .vscode/.env file:")
+        secure_log("error", "The following required environment variables are missing from your .vscode/.env file:")
         for var in missing_vars:
-            logging.error(f"  - {var}")
+            secure_log("error", f"  - {var}")
         sys.exit(1)
 
     obsidian_api_key = fetch_api_key_from_1password(api_key_ref)
@@ -53,12 +87,12 @@ def fetch_api_key_from_1password(secret_reference: str) -> str:
         )
         return result.stdout.strip()
     except FileNotFoundError:
-        logging.error(
+        secure_log("error",
             "1Password CLI ('op') not found. Please install it from https://developer.1password.com/docs/cli/"
         )
         sys.exit(1)
     except subprocess.CalledProcessError as e:
-        logging.error(f"Error fetching secret from 1Password:\n{e.stderr}")
+        secure_log("error", f"Error fetching secret from 1Password:\n{e.stderr}")
         sys.exit(1)
 
 
@@ -72,7 +106,7 @@ def create_api_session(api_key: str) -> requests.Session:
 def verify_connection(session: requests.Session, api_url: str, timeout: int) -> None:
     """Verifies connection to the Obsidian API and prints vault info."""
     try:
-        logging.info(f"Connecting to Obsidian API at {api_url}...")
+        secure_log("info", f"Connecting to Obsidian API at {api_url}...")
         response = session.get(api_url, timeout=timeout)
         response.raise_for_status()
 
@@ -88,15 +122,16 @@ def verify_connection(session: requests.Session, api_url: str, timeout: int) -> 
             if not all([service_name, obsidian_version, api_version]):
                 raise ValueError("Incomplete version/manifest info in API response.")
 
-            logging.info(f"Successfully connected to service: '{service_name}'")
-            logging.info(f"Obsidian v{obsidian_version}, API v{api_version}")
+            secure_log("info", f"Successfully connected to service: '{service_name}'")
+            secure_log("info", f"Obsidian v{obsidian_version}, API v{api_version}")
 
         except (requests.exceptions.JSONDecodeError, ValueError):
-            logging.error("The API response from the root endpoint was not in the expected format.")
-            logging.error("Please ensure the Obsidian Local REST API plugin is up-to-date and enabled correctly.")
-            logging.error(f"Received response body: {response.text}")
+            secure_log("error", "The API response from the root endpoint was not in the expected format.")
+            secure_log("error", "Please ensure the Obsidian Local REST API plugin is up-to-date and enabled correctly.")
+            # Redact response body to avoid logging sensitive content
+            secure_log("error", f"Received response body: [REDACTED - {len(response.text)} characters]")
             sys.exit(1)
     except requests.exceptions.RequestException as e:
-        logging.error(f"Error during vault connection: {e}")
-        logging.error("Please ensure Obsidian is running and the Local REST API plugin is enabled.")
+        secure_log("error", f"Error during vault connection: {e}")
+        secure_log("error", "Please ensure Obsidian is running and the Local REST API plugin is enabled.")
         sys.exit(1)

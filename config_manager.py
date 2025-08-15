@@ -11,6 +11,40 @@ import base64
 import sys
 from datetime import datetime
 
+# Add secure logging function at the top
+def secure_log(level: str, message: str, sensitive_data: Dict[str, str] = None) -> None:
+    """
+    Secure logging function that redacts sensitive information.
+    
+    Args:
+        level: Log level (info, warning, error, debug)
+        message: Log message
+        sensitive_data: Dict of sensitive values to redact (e.g., {"api_key": "actual_key"})
+    """
+    if sensitive_data:
+        redacted_message = message
+        for key, value in sensitive_data.items():
+            if value and len(value) > 8:  # Only redact if value exists and is long enough
+                # Redact all but first 4 and last 4 characters
+                redacted_value = value[:4] + "*" * (len(value) - 8) + value[-4:]
+                redacted_message = redacted_message.replace(value, redacted_value)
+            elif value:
+                # For short values, redact completely
+                redacted_message = redacted_message.replace(value, "*" * len(value))
+    else:
+        redacted_message = message
+    
+    # Use the appropriate logging method
+    logger = logging.getLogger(__name__)
+    if level.lower() == "info":
+        logger.info(redacted_message)
+    elif level.lower() == "warning":
+        logger.warning(redacted_message)
+    elif level.lower() == "error":
+        logger.error(redacted_message)
+    elif level.lower() == "debug":
+        logger.debug(redacted_message)
+
 
 class ConfigEncryption:
     """Handles encryption and decryption of sensitive configuration data."""
@@ -55,7 +89,7 @@ class ConfigEncryption:
             f = Fernet(key)
             return f.encrypt(json.dumps(secrets).encode())
         except Exception as e:
-            logging.error(f"Encryption failed: {e}")
+            secure_log("error", f"Encryption failed: {e}")
             raise
     
     def decrypt_secrets(self, encrypted_data: bytes, master_password: str) -> Dict[str, Any]:
@@ -66,7 +100,7 @@ class ConfigEncryption:
             decrypted = f.decrypt(encrypted_data)
             return json.loads(decrypted.decode())
         except Exception as e:
-            logging.error(f"Decryption failed: {e}")
+            secure_log("error", f"Decryption failed: {e}")
             raise
 
 
@@ -153,7 +187,7 @@ class ConfigManager:
                 self._config_cache = json.load(f)
                 return self._config_cache
         except Exception as e:
-            logging.error(f"Failed to load config: {e}")
+            secure_log("error", f"Failed to load config: {e}")
             return self.get_default_config()
     
     def save_config(self, config: Dict[str, Any]) -> None:
@@ -163,7 +197,7 @@ class ConfigManager:
                 json.dump(config, f, indent=2)
             self._config_cache = config
         except Exception as e:
-            logging.error(f"Failed to save config: {e}")
+            secure_log("error", f"Failed to save config: {e}")
             raise
     
     def load_secrets(self, master_password: Optional[str] = None) -> Dict[str, Any]:
@@ -200,7 +234,7 @@ class ConfigManager:
             self._secrets_cache = secrets
             return secrets
         except Exception as e:
-            logging.error(f"Failed to load encrypted secrets: {e}")
+            secure_log("error", f"Failed to load encrypted secrets: {e}")
             raise
     
     def _load_1password_secrets(self, master_password: Optional[str] = None) -> Dict[str, Any]:
@@ -247,21 +281,21 @@ class ConfigManager:
                 try:
                     secrets["obsidian_api_key"] = self._fetch_1password_secret(secrets["obsidian_api_key_ref"])
                 except Exception as e:
-                    logging.warning(f"Failed to fetch Obsidian API key from 1Password: {e}")
+                    secure_log("warning", f"Failed to fetch Obsidian API key from 1Password: {e}")
                     secrets["obsidian_api_key"] = ""
             
             if secrets.get("gemini_api_key_ref"):
                 try:
                     secrets["gemini_api_key"] = self._fetch_1password_secret(secrets["gemini_api_key_ref"])
                 except Exception as e:
-                    logging.warning(f"Failed to fetch Gemini API key from 1Password: {e}")
+                    secure_log("warning", f"Failed to fetch Gemini API key from 1Password: {e}")
                     secrets["gemini_api_key"] = ""
             
             self._secrets_cache = secrets
             return secrets
             
         except Exception as e:
-            logging.error(f"Failed to load 1Password secrets: {e}")
+            secure_log("error", f"Failed to load 1Password secrets: {e}")
             raise
     
     def _fetch_1password_secret(self, secret_reference: str) -> str:
@@ -303,7 +337,7 @@ class ConfigManager:
             with open(self.secrets_file, 'wb') as f:
                 f.write(encrypted_data)
         except Exception as e:
-            logging.error(f"Failed to save encrypted secrets: {e}")
+            secure_log("error", f"Failed to save encrypted secrets: {e}")
             raise
     
     def _save_1password_references(self, secrets: Dict[str, Any]) -> None:
@@ -319,9 +353,9 @@ class ConfigManager:
             with open(self.secrets_file, 'w') as f:
                 json.dump(references_only, f, indent=2)
                 
-            logging.info("1Password references saved to secrets file")
+            secure_log("info", "1Password references saved to secrets file")
         except Exception as e:
-            logging.error(f"Failed to save 1Password references: {e}")
+            secure_log("error", f"Failed to save 1Password references: {e}")
             raise
     
     def get_api_keys(self, master_password: Optional[str] = None) -> Tuple[str, str]:
@@ -387,7 +421,7 @@ class ConfigManager:
             return False
             
         except Exception as e:
-            logging.error(f"Connection test failed: {e}")
+            secure_log("error", f"Connection test failed: {e}")
             return False
     
     def validate_config(self) -> Tuple[bool, list]:
@@ -465,7 +499,7 @@ class ConfigManager:
             return True
             
         except Exception as e:
-            logging.error(f"Migration failed: {e}")
+            secure_log("error", f"Migration failed: {e}")
             return False
     
     def export_config(self, export_path: str, include_secrets: bool = False, 
@@ -490,7 +524,7 @@ class ConfigManager:
             return True
             
         except Exception as e:
-            logging.error(f"Export failed: {e}")
+            secure_log("error", f"Export failed: {e}")
             return False
     
     def import_config(self, import_path: str, master_password: Optional[str] = None) -> bool:
@@ -506,10 +540,10 @@ class ConfigManager:
                 if master_password:
                     self.save_secrets(import_data["secrets"], master_password)
                 else:
-                    logging.warning("Secrets found but no master password provided")
+                    secure_log("warning", "Secrets found but no master password provided")
             
             return True
             
         except Exception as e:
-            logging.error(f"Import failed: {e}")
+            secure_log("error", f"Import failed: {e}")
             return False
