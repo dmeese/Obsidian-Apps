@@ -1,6 +1,7 @@
-# Ignore markdown files, but not the main README
+# Ignore markdown files, but not the main README and SECURITY.md
 *.md
 !README.md
+!SECURITY.md
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -94,16 +95,50 @@ env/
 .project
 .pyre
 
-# Configuration files with secrets
+# ========================================
+# SECURITY: Configuration files with secrets
+# ========================================
+
+# Local encrypted secrets
 config/secrets.encrypted
 config/*.key
 config/.salt
-*.encrypted
+config/*.encrypted
+config/*.pem
+config/*.p12
+config/*.pfx
+
+# Environment files with secrets
 .env.local
 .env.production
+.env.staging
+.env.development
+.env.test
+.env.*.local
 
-# Keep example configs
+# API keys and tokens
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.csr
+*.srl
+*.pwd
+*.pass
+*.secret
+
+# 1Password CLI session files
+.op_session
+.op_session_*
+.op_session.*
+
+# Keep example configs (safe to commit)
 !config/config.example.json
+
+# ========================================
+# DEVELOPMENT TOOLS
+# ========================================
 
 # mypy
 .mypy_cache/
@@ -112,11 +147,50 @@ config/.salt
 *.sublime-project
 *.sublime-workspace
 
-# VSCode
+# VSCode (exclude entire directory for security)
 .vscode/
+
+# PyCharm
+.idea/
+
+# ========================================
+# APPLICATION SPECIFIC
+# ========================================
 
 # Ingest folder for source documents
 ingest/
 
-# PyCharm
-.idea/
+# Temporary and cache files
+*.tmp
+*.temp
+*.cache
+*.bak
+*.backup
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Log files (may contain sensitive information)
+*.log
+logs/
+log/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup files
+*.backup
+*.bak
+*.old
+*.orig
