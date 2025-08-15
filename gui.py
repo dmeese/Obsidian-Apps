@@ -3,6 +3,8 @@ import os
 import logging
 import threading
 import json
+import re
+import urllib.parse
 from typing import Optional
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -10,7 +12,9 @@ from PyQt6.QtWidgets import (
     QSpinBox, QDoubleSpinBox, QCheckBox, QFileDialog, QProgressBar,
     QGroupBox, QFormLayout, QMessageBox, QSplitter, QFrame,
     QScrollArea, QSizePolicy, QGridLayout, QHBoxLayout, QVBoxLayout,
-    QComboBox, QRadioButton
+    QComboBox, QRadioButton, QTreeView, QTreeWidget,
+    QTreeWidgetItem, QDialog, QDialogButtonBox, QVBoxLayout as QVBoxLayout2,
+    QHBoxLayout as QHBoxLayout2
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSize
 from PyQt6.QtGui import QFont, QIcon, QTextCursor, QPalette, QColor, QPixmap
@@ -18,6 +22,10 @@ from utils import create_api_session, verify_connection
 from analyzer import run_analysis_process
 from ingest import run_ingest_process
 from config_manager import ConfigManager
+from web_research.research_engine import WebResearchEngine
+from web_research.source_handlers.wikipedia_handler import WikipediaHandler, WikipediaArticle
+from dataclasses import asdict
+import time
 
 
 class ModernButton(QPushButton):
@@ -718,7 +726,7 @@ class ObsidianToolsGUI(QMainWindow):
         top_row.setSpacing(20)  # Increased spacing
         
         # Left side: Folder configuration - give it more width
-        folders_group = ModernGroupBox("Folder Configuration")
+        folders_group = ModernGroupBox("📁 Local Folder Configuration")
         folders_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         folders_layout = QFormLayout(folders_group)
         folders_layout.setSpacing(16)  # Increased spacing
@@ -728,7 +736,7 @@ class ObsidianToolsGUI(QMainWindow):
         ingest_folder_layout = QHBoxLayout()
         ingest_folder_layout.setSpacing(12)  # Increased spacing
         
-        self.ingest_folder_edit = ModernLineEdit(placeholder="Select ingest folder", initial_text="ingest")
+        self.ingest_folder_edit = ModernLineEdit(placeholder="Click Browse to select a local folder containing documents to ingest", initial_text="ingest")
         self.ingest_folder_edit.setMinimumWidth(300)  # Set minimum width
         ingest_folder_layout.addWidget(self.ingest_folder_edit)
         
@@ -741,7 +749,7 @@ class ObsidianToolsGUI(QMainWindow):
         notes_folder_layout = QHBoxLayout()
         notes_folder_layout.setSpacing(12)  # Increased spacing
         
-        self.notes_folder_edit = ModernLineEdit(placeholder="Select notes folder", initial_text="GeneratedNotes")
+        self.notes_folder_edit = ModernLineEdit(placeholder="Click Browse to select a folder from your Obsidian vault", initial_text="GeneratedNotes")
         self.notes_folder_edit.setMinimumWidth(300)  # Set minimum width
         notes_folder_layout.addWidget(self.notes_folder_edit)
         
@@ -808,7 +816,7 @@ class ObsidianToolsGUI(QMainWindow):
         right_layout.addWidget(self.ingest_button)
         
         # Add some spacing and status info
-        status_info = QLabel("Configure your folders above and click the button to start document ingestion.\n\nThis will process documents in your ingest folder and create structured notes in Obsidian.")
+        status_info = QLabel("Configure your folders above and click the button to start document ingestion.\n\nThis will process documents from your selected local folder and create structured notes in Obsidian.")
         status_info.setWordWrap(True)
         status_info.setStyleSheet("color: #6b7280; font-size: 12px; line-height: 1.4;")  # Reduced from 13px
         right_layout.addWidget(status_info)
@@ -819,20 +827,20 @@ class ObsidianToolsGUI(QMainWindow):
         layout.addLayout(top_row)
         
         # Bottom row: File list and refresh controls
-        files_group = ModernGroupBox("Files in Ingest Folder")
+        files_group = ModernGroupBox("📝 Files in Selected Local Folder")
         files_layout = QVBoxLayout(files_group)
         files_layout.setSpacing(12)  # Reduced from default
         
         # File count and refresh button row
         file_header_layout = QHBoxLayout()
-        file_count_label = QLabel("0 files found")
-        file_count_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Medium))
-        file_count_label.setStyleSheet("color: #374151;")
-        file_header_layout.addWidget(file_count_label)
+        self.file_count_label = QLabel("0 files found")
+        self.file_count_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Medium))
+        self.file_count_label.setStyleSheet("color: #374151;")
+        file_header_layout.addWidget(self.file_count_label)
         
         file_header_layout.addStretch()
         
-        refresh_button = ModernButton("🔄 Refresh", size="small")
+        refresh_button = ModernButton("🔄 Refresh Files", size="small")
         refresh_button.clicked.connect(self.refresh_file_list)
         file_header_layout.addWidget(refresh_button)
         
@@ -879,7 +887,7 @@ class ObsidianToolsGUI(QMainWindow):
         vault_folder_layout = QHBoxLayout()
         vault_folder_layout.setSpacing(12)  # Increased spacing
         
-        self.vault_folder_edit = ModernLineEdit(placeholder="Select vault folder to research", initial_text="")
+        self.vault_folder_edit = ModernLineEdit(placeholder="Click Browse to select a folder from your Obsidian vault", initial_text="")
         self.vault_folder_edit.setMinimumWidth(300)  # Set minimum width
         vault_folder_layout.addWidget(self.vault_folder_edit)
         
@@ -1637,23 +1645,144 @@ class ObsidianToolsGUI(QMainWindow):
             self.status_label.setStyleSheet("color: #92400e; margin: 0;")
 
     def select_ingest_folder(self):
-        """Open folder dialog to select ingest folder."""
-        folder = QFileDialog.getExistingDirectory(self, "Select Ingest Folder")
-        if folder:
-            self.ingest_folder_edit.setText(folder)
-            self.refresh_file_list()
+        """Open local file system browser to select ingest folder."""
+        try:
+            # Use local file system browser for ingest folder
+            folder = QFileDialog.getExistingDirectory(
+                self, 
+                "Select Ingest Folder", 
+                "",  # Start from current directory
+                QFileDialog.Option.ShowDirsOnly
+            )
+            
+            if folder:
+                self.ingest_folder_edit.setText(folder)
+                
+                # Refresh file list after selection
+                self.refresh_file_list()
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to browse folders: {str(e)}")
+            self.log_message(f"Folder browse error: {str(e)}")
 
     def select_notes_folder(self):
-        """Open folder dialog to select notes folder."""
-        folder = QFileDialog.getExistingDirectory(self, "Select Notes Folder")
-        if folder:
-            self.notes_folder_edit.setText(folder)
+        """Open Obsidian vault folder browser to select notes folder."""
+        if not self.session:
+            QMessageBox.warning(self, "Warning", "Not connected to Obsidian. Please connect first.")
+            return
+        
+        try:
+            # Get vault folders from Obsidian
+            folders = self.get_obsidian_vault_folders()
+            
+            if not folders:
+                QMessageBox.information(self, "No Folders", "No folders found in your Obsidian vault.")
+                return
+            
+            # Use custom tree dialog for better folder hierarchy display
+            dialog = FolderSelectionDialog(self, folders)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                selected = dialog.get_selected_folder()
+                if selected:
+                    if selected == "Root (Entire Vault)":
+                        self.notes_folder_edit.setText("")  # Empty string means root
+                    else:
+                        self.notes_folder_edit.setText(selected)
+                    self.log_message(f"Selected notes folder: {selected}")
+                else:
+                    self.log_message("No folder selected")
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to browse vault folders: {str(e)}")
+            self.log_message(f"Vault folder browse error: {str(e)}")
 
     def select_vault_folder(self):
-        """Open folder dialog to select vault folder for research."""
-        folder = QFileDialog.getExistingDirectory(self, "Select Vault Folder to Research")
-        if folder:
-            self.vault_folder_edit.setText(folder)
+        """Open Obsidian vault folder browser to select folder for research."""
+        if not self.session:
+            QMessageBox.warning(self, "Warning", "Not connected to Obsidian. Please connect first.")
+            return
+        
+        try:
+            # Get vault folders from Obsidian
+            folders = self.get_obsidian_vault_folders()
+            
+            if not folders:
+                QMessageBox.information(self, "No Folders", "No folders found in your Obsidian vault.")
+                return
+            
+            # Use custom tree dialog for better folder hierarchy display
+            dialog = FolderSelectionDialog(self, folders)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                selected = dialog.get_selected_folder()
+                if selected:
+                    self.vault_folder_edit.setText(selected)
+                    self.log_message(f"Selected vault folder: {selected}")
+                else:
+                    self.log_message("No folder selected")
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to browse vault folders: {str(e)}")
+            self.log_message(f"Vault folder browse error: {str(e)}")
+    
+    def get_obsidian_vault_folders(self):
+        """Get list of folders from the Obsidian vault using the API."""
+        try:
+            # Use the correct Obsidian API endpoint: /vault/
+            response = self.session.get(f"{self.api_url}/vault/")
+            if response.status_code != 200:
+                self.log_message(f"Failed to get vault contents: {response.status_code}")
+                return []
+            
+            contents = response.json()
+            items = contents.get("files", [])
+            
+            # Debug: Log what we're getting from the API
+            self.log_message(f"API returned {len(items)} items")
+            if items:
+                self.log_message(f"Sample items: {items[:5]}")
+            
+            # Extract unique folders from file paths - now properly handling nested structures
+            folders = set()
+            
+            for item_path in items:
+                if item_path.endswith("/"):  # This is a directory
+                    # Remove trailing slash and add to folders
+                    folder_path = item_path.rstrip('/')
+                    if folder_path:
+                        folders.add(folder_path)
+                        self.log_message(f"Added directory: {folder_path}")
+                elif item_path.endswith(".md"):  # This is a markdown file
+                    # Extract folder path (everything before the filename)
+                    folder_path = os.path.dirname(item_path)
+                    if folder_path and folder_path != '.':
+                        # Split into individual folder levels and add each level
+                        path_parts = folder_path.split('/')
+                        current_path = ""
+                        for part in path_parts:
+                            if part:
+                                current_path = f"{current_path}/{part}" if current_path else part
+                                folders.add(current_path)
+                                self.log_message(f"Added folder from file: {current_path}")
+            
+            # Convert to sorted list with proper hierarchy
+            # Sort by depth first (shallowest folders first), then alphabetically
+            folder_list = sorted(list(folders), key=lambda x: (x.count('/'), x))
+            
+            # Add root folder option
+            folder_list.insert(0, "Root (Entire Vault)")
+            
+            # If no folders found, still add root option
+            if not folder_list:
+                folder_list = ["Root (Entire Vault)"]
+            
+            self.log_message(f"Found {len(folder_list)} folders in vault (including nested)")
+            self.log_message(f"Folder list: {folder_list}")
+            return folder_list
+            
+        except Exception as e:
+            self.log_message(f"Error getting vault folders: {str(e)}")
+            # Return at least the root option
+            return ["Root (Entire Vault)"]
 
     def start_web_research(self):
         """Start the web research process."""
@@ -1668,7 +1797,8 @@ class ObsidianToolsGUI(QMainWindow):
         # Disable button and show progress
         self.research_button.setEnabled(False)
         self.research_progress_bar.setVisible(True)
-        self.research_progress_bar.setRange(0, 0)  # Indeterminate progress
+        self.research_progress_bar.setRange(0, 100)  # Set range for progress
+        self.research_progress_bar.setValue(0)  # Start at 0
         
         # Clear previous results
         self.research_results_text.clear()
@@ -1677,44 +1807,217 @@ class ObsidianToolsGUI(QMainWindow):
         self.log_message("Starting web research...")
         self.research_results_text.append("🔍 Starting web research...\n")
         
-        # TODO: Implement actual web research functionality
-        # For now, just show a placeholder message
-        self.research_results_text.append("✅ Web research tab is ready!\n")
-        self.research_results_text.append("📁 Selected folder: " + self.vault_folder_edit.text() + "\n")
-        self.research_results_text.append("🌐 Wikipedia research: " + ("Enabled" if self.wikipedia_checkbox.isChecked() else "Disabled") + "\n")
-        self.research_results_text.append("📊 Max articles per note: " + str(self.max_articles_spin.value()) + "\n")
-        self.research_results_text.append("💾 Backup original notes: " + ("Yes" if self.backup_original_checkbox.isChecked() else "No") + "\n")
+        try:
+            # Import and initialize the web research engine
+            from web_research.research_engine import WebResearchEngine
+            
+            # Initialize the research engine
+            research_engine = WebResearchEngine()
+            
+            # Get research parameters
+            selected_folder = self.vault_folder_edit.text().strip()
+            max_articles = self.max_articles_spin.value()
+            backup_original = self.backup_original_checkbox.isChecked()
+            recursive_processing = self.recursive_checkbox.isChecked()
+            
+            self.research_results_text.append(f"📁 Researching folder: {selected_folder}\n")
+            self.research_results_text.append(f"🌐 Wikipedia research: Enabled\n")
+            self.research_results_text.append(f"📊 Max articles per note: {max_articles}\n")
+            self.research_results_text.append(f"💾 Backup original notes: {'Yes' if backup_original else 'No'}\n")
+            self.research_results_text.append(f"📂 Recursive processing: {'Yes' if recursive_processing else 'No'}\n\n")
+            
+            # Determine the target folder path
+            if selected_folder == "Root (Entire Vault)":
+                target_folder = ""
+                self.research_results_text.append("🔍 Researching entire vault...\n")
+            else:
+                target_folder = selected_folder
+                self.research_results_text.append(f"🔍 Researching folder: {target_folder}\n")
+            
+            # Get notes from the selected folder
+            notes = self.get_notes_from_folder(target_folder, recursive=recursive_processing)
+            
+            if not notes:
+                self.research_results_text.append("⚠️ No notes found in the selected folder.\n")
+                self.log_message("No notes found in selected folder")
+                return
+            
+            self.research_results_text.append(f"📝 Found {len(notes)} notes to research\n\n")
+            
+            # Research each note
+            total_articles = 0
+            total_citations = 0
+            total_sections = 0
+            
+            for i, note in enumerate(notes, 1):
+                self.research_results_text.append(f"🔍 Researching note {i}/{len(notes)}: {note['title']}\n")
+                
+                # Perform research on this note
+                research_results = research_engine.research_note(
+                    note['content'], 
+                    note['title'], 
+                    max_articles=max_articles
+                )
+                
+                if research_results.wikipedia_articles:
+                    self.research_results_text.append(f"   ✅ Found {len(research_results.wikipedia_articles)} relevant articles\n")
+                    
+                    for j, article in enumerate(research_results.wikipedia_articles, 1):
+                        self.research_results_text.append(f"      {j}. {article.title} (Score: {article.relevance_score:.2f})\n")
+                    
+                    total_articles += len(research_results.wikipedia_articles)
+                    total_citations += research_results.citations_added
+                    total_sections += research_results.content_sections_added
+                else:
+                    self.research_results_text.append(f"   ⚠️ No relevant articles found\n")
+                
+                self.research_results_text.append("\n")
+                
+                # Update progress
+                progress = int((i / len(notes)) * 100)
+                self.research_progress_bar.setValue(progress)
+            
+            # Show final results
+            self.research_results_text.append("🎉 Research completed!\n\n")
+            self.research_results_text.append("📊 Final Results:\n")
+            self.research_results_text.append(f"   • Notes researched: {len(notes)}\n")
+            self.research_results_text.append(f"   • Total articles found: {total_articles}\n")
+            self.research_results_text.append(f"   • Total citations added: {total_citations}\n")
+            self.research_results_text.append(f"   • Total content sections added: {total_sections}\n")
+            
+            self.log_message(f"✅ Web research completed! Researched {len(notes)} notes, found {total_articles} articles")
+                
+        except ImportError as e:
+            error_msg = f"Failed to import web research modules: {e}"
+            self.research_results_text.append(f"❌ {error_msg}\n")
+            self.log_message(f"Web research error: {error_msg}")
+            
+        except Exception as e:
+            error_msg = f"Research failed: {str(e)}"
+            self.research_results_text.append(f"❌ {error_msg}\n")
+            self.log_message(f"Web research error: {error_msg}")
         
-        # Re-enable button and hide progress
-        self.research_button.setEnabled(True)
-        self.research_progress_bar.setVisible(False)
-        
-        self.log_message("Web research completed (placeholder implementation)")
+        finally:
+            # Re-enable button and hide progress
+            self.research_button.setEnabled(True)
+            self.research_progress_bar.setVisible(False)
+    
+    def get_notes_from_folder(self, folder_path="", recursive=True):
+        """Get notes from a specific folder in the Obsidian vault."""
+        try:
+            # Use the correct Obsidian API endpoint: /vault/
+            response = self.session.get(f"{self.api_url}/vault/")
+            if response.status_code != 200:
+                self.log_message(f"Failed to get vault contents: {response.status_code}")
+                return []
+            
+            contents = response.json()
+            items = contents.get("files", [])
+            notes = []
+            
+            for item_path in items:
+                if not item_path.endswith('.md'):
+                    continue
+                
+                # Check if this file is in the target folder
+                if folder_path:
+                    if recursive:
+                        # For recursive processing, check if the file is in the target folder or any subfolder
+                        if not item_path.startswith(folder_path + '/'):
+                            continue
+                    else:
+                        # For non-recursive processing, only include files directly in the target folder
+                        item_dir = os.path.dirname(item_path)
+                        if item_dir != folder_path:
+                            continue
+                else:
+                    # For root vault, include all markdown files
+                    pass
+                
+                # Get the note content using the correct API endpoint
+                try:
+                    encoded_note_path = urllib.parse.quote(item_path)
+                    note_response = self.session.get(
+                        f"{self.api_url}/vault/{encoded_note_path}",
+                        headers={"Accept": "text/markdown"},
+                        timeout=30
+                    )
+                    if note_response.status_code == 200:
+                        note_content = note_response.text
+                        
+                        # Extract title from filename or frontmatter
+                        title = os.path.splitext(os.path.basename(item_path))[0]
+                        
+                        # Try to get title from frontmatter
+                        if note_content.startswith('---'):
+                            frontmatter_end = note_content.find('---', 3)
+                            if frontmatter_end != -1:
+                                frontmatter = note_content[3:frontmatter_end]
+                                title_match = re.search(r'^title:\s*(.+)$', frontmatter, re.MULTILINE)
+                                if title_match:
+                                    title = title_match.group(1).strip()
+                        
+                        notes.append({
+                            'title': title,
+                            'content': note_content,
+                            'path': item_path
+                        })
+                        
+                except Exception as e:
+                    self.log_message(f"Failed to read note {item_path}: {str(e)}")
+                    continue
+            
+            folder_display = folder_path if folder_path else "Root (Entire Vault)"
+            recursive_text = " (recursive)" if recursive else " (non-recursive)"
+            self.log_message(f"Found {len(notes)} notes in folder: {folder_display}{recursive_text}")
+            return notes
+            
+        except Exception as e:
+            self.log_message(f"Error getting notes from folder: {str(e)}")
+            return []
 
     def refresh_file_list(self):
-        """Refresh the list of files in the ingest folder."""
+        """Refresh the list of files in the local ingest folder."""
         try:
             # Check if the widgets exist before using them
             if not hasattr(self, 'ingest_folder_edit') or not hasattr(self, 'files_text'):
                 self.log_message("Warning: Cannot refresh file list - widgets not ready")
                 return
             
-            ingest_folder = self.ingest_folder_edit.text()
-            if not ingest_folder or not os.path.isdir(ingest_folder):
-                self.files_text.setText("Folder not found or invalid")
+            ingest_folder = self.ingest_folder_edit.text().strip()
+            
+            if not ingest_folder:
+                self.files_text.setText("No ingest folder selected")
+                self.file_count_label.setText("0 files found")
                 return
             
-            files = []
-            for filename in os.listdir(ingest_folder):
-                file_path = os.path.join(ingest_folder, filename)
-                if os.path.isfile(file_path):
-                    size = os.path.getsize(file_path)
-                    files.append(f"{filename} ({size} bytes)")
+            if not os.path.isdir(ingest_folder):
+                self.files_text.setText(f"Folder not found: {ingest_folder}")
+                self.file_count_label.setText("0 files found")
+                return
             
-            if files:
-                self.files_text.setText("\n".join(files))
+            # Get files from local file system
+            matching_files = []
+            try:
+                for filename in os.listdir(ingest_folder):
+                    file_path = os.path.join(ingest_folder, filename)
+                    if os.path.isfile(file_path):
+                        # Get file size
+                        file_size = os.path.getsize(file_path)
+                        size_str = f" ({file_size} bytes)"
+                        matching_files.append(f"{filename}{size_str}")
+            except PermissionError:
+                self.files_text.setText(f"Permission denied accessing folder: {ingest_folder}")
+                self.file_count_label.setText("0 files found")
+                return
+            
+            if matching_files:
+                self.files_text.setText(f"Found {len(matching_files)} files:\n\n" + "\n".join(matching_files))
+                self.file_count_label.setText(f"{len(matching_files)} files found")
             else:
-                self.files_text.setText("No files found in ingest folder")
+                self.files_text.setText(f"No files found in folder: {ingest_folder}")
+                self.file_count_label.setText("0 files found")
+                
         except Exception as e:
             # Log the error but don't crash
             if hasattr(self, 'log_output'):
@@ -2256,6 +2559,104 @@ class ObsidianToolsGUI(QMainWindow):
             return False, "1Password reference must be in format: op://vault/item/field"
         
         return True, "Valid 1Password reference"
+
+
+class FolderSelectionDialog(QDialog):
+    """Custom dialog for selecting folders from Obsidian vault with tree view."""
+    
+    def __init__(self, parent=None, folder_list=None):
+        super().__init__(parent)
+        self.setWindowTitle("Select Folder")
+        self.setModal(True)
+        self.setMinimumSize(400, 300)
+        
+        self.selected_folder = None
+        self.folder_list = folder_list or []
+        
+        self.setup_ui()
+        self.populate_tree()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout2(self)
+        
+        # Instructions
+        instructions = QLabel("Select a folder from your Obsidian vault:")
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
+        
+        # Tree widget
+        self.tree = QTreeWidget()
+        self.tree.setHeaderLabel("Folders")
+        self.tree.itemDoubleClicked.connect(self.accept)
+        layout.addWidget(self.tree)
+        
+        # Buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | 
+                                     QDialogButtonBox.StandardButton.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+    
+    def populate_tree(self):
+        self.tree.clear()
+        
+        # Add root option
+        root_item = QTreeWidgetItem(self.tree, ["Root (Entire Vault)"])
+        root_item.setData(0, Qt.ItemDataRole.UserRole, "Root (Entire Vault)")
+        
+        # Group folders by depth and create hierarchy
+        folders_by_depth = {}
+        for folder in self.folder_list:
+            if folder == "Root (Entire Vault)":
+                continue
+            depth = folder.count('/')
+            if depth not in folders_by_depth:
+                folders_by_depth[depth] = []
+            folders_by_depth[depth].append(folder)
+        
+        # Add folders level by level
+        for depth in sorted(folders_by_depth.keys()):
+            for folder in sorted(folders_by_depth[depth]):
+                # Find parent folder
+                parent_path = '/'.join(folder.split('/')[:-1])
+                parent_item = self.find_parent_item(parent_path)
+                
+                if parent_item:
+                    child_item = QTreeWidgetItem(parent_item, [folder.split('/')[-1]])
+                    child_item.setData(0, Qt.ItemDataRole.UserRole, folder)
+                else:
+                    # Top level folder
+                    item = QTreeWidgetItem(self.tree, [folder])
+                    item.setData(0, Qt.ItemDataRole.UserRole, folder)
+        
+        self.tree.expandAll()
+    
+    def find_parent_item(self, parent_path):
+        """Find the tree item for a given parent path."""
+        if not parent_path:
+            return None
+        
+        def search_items(item):
+            if item.data(0, Qt.ItemDataRole.UserRole) == parent_path:
+                return item
+            for i in range(item.childCount()):
+                result = search_items(item.child(i))
+                if result:
+                    return result
+            return None
+        
+        for i in range(self.tree.topLevelItemCount()):
+            result = search_items(self.tree.topLevelItem(i))
+            if result:
+                return result
+        return None
+    
+    def get_selected_folder(self):
+        """Get the currently selected folder."""
+        current_item = self.tree.currentItem()
+        if current_item:
+            return current_item.data(0, Qt.ItemDataRole.UserRole)
+        return None
 
 
 def main():

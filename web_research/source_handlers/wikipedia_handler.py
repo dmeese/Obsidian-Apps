@@ -210,7 +210,7 @@ class WikipediaHandler:
     
     def get_article_content(self, page_id: int) -> Optional[WikipediaArticle]:
         """
-        Extract content from a Wikipedia article.
+        Extract content from a Wikipedia article using MediaWiki Action API.
         
         Args:
             page_id: Wikipedia page ID
@@ -218,36 +218,67 @@ class WikipediaHandler:
         Returns:
             WikipediaArticle object with extracted content
         """
-        # Get article summary
-        summary_url = f"{self.base_url}/page/summary/{page_id}"
-        summary_response = self._make_request(summary_url)
+        # Get article content using MediaWiki Action API
+        params = {
+            'action': 'query',
+            'format': 'json',
+            'pageids': page_id,
+            'prop': 'extracts|info|categories|links',
+            'exintro': 1,  # Get introduction only
+            'explaintext': 1,  # Return plain text instead of HTML
+            'inprop': 'url',
+            'cllimit': 20,  # Limit categories
+            'lllimit': 50   # Limit links
+        }
         
-        if not summary_response:
+        response = self._make_request(self.search_url, params)
+        if not response:
             return None
         
         try:
-            summary_data = summary_response.json()
+            data = response.json()
+            pages = data.get('query', {}).get('pages', {})
+            page_data = pages.get(str(page_id))
             
-            # Get full article content
-            content_url = f"{self.base_url}/page/html/{page_id}"
-            content_response = self._make_request(content_url)
+            if not page_data:
+                self.logger.warning(f"No page data found for page ID {page_id}")
+                return None
             
+            # Extract basic information
+            title = page_data.get('title', '')
+            extract = page_data.get('extract', '')
+            url = page_data.get('fullurl', f"https://en.wikipedia.org/wiki/{quote(title)}")
+            
+            # Extract categories
+            categories = []
+            for cat in page_data.get('categories', []):
+                cat_title = cat.get('title', '')
+                if cat_title.startswith('Category:'):
+                    categories.append(cat_title[9:])  # Remove 'Category:' prefix
+            
+            # Extract links (potential references)
+            links = []
+            for link in page_data.get('links', []):
+                link_title = link.get('title', '')
+                if not link_title.startswith('Category:') and not link_title.startswith('File:'):
+                    links.append(link_title)
+            
+            # Create article object
             article = WikipediaArticle(
-                title=summary_data.get('title', ''),
+                title=title,
                 page_id=page_id,
-                url=summary_data.get('content_urls', {}).get('desktop', {}).get('page', ''),
-                summary=summary_data.get('extract', ''),
-                categories=summary_data.get('categories', []),
-                references=[],
-                citations=[],
+                url=url,
+                summary=extract[:1000] if extract else '',  # Limit summary length
+                categories=categories[:10],  # Limit categories
+                references=links[:20],  # Use links as references
+                citations=[],  # Will be populated separately
                 content_sections=[]
             )
             
-            # Extract content sections if available
-            if content_response:
-                article.content_sections = self._extract_content_sections(content_response.text)
+            # Try to get more detailed content for sections
+            article.content_sections = self._get_content_sections(page_id)
             
-            # Extract references and citations
+            # Get citations/references
             article.references, article.citations = self._extract_references_and_citations(page_id)
             
             return article
@@ -256,36 +287,85 @@ class WikipediaHandler:
             self.logger.error(f"Failed to parse article content: {e}")
             return None
     
-    def _extract_content_sections(self, html_content: str) -> List[Dict[str, str]]:
-        """Extract content sections from HTML content."""
-        sections = []
+    def _get_content_sections(self, page_id: int) -> List[Dict[str, str]]:
+        """Get content sections using MediaWiki Action API."""
+        params = {
+            'action': 'query',
+            'format': 'json',
+            'pageids': page_id,
+            'prop': 'revisions',
+            'rvprop': 'content',
+            'rvslots': 'main'
+        }
         
-        # Simple HTML parsing for sections
-        # This is a basic implementation - could be enhanced with BeautifulSoup
-        section_pattern = r'<h[2-6][^>]*>(.*?)</h[2-6]>.*?(?=<h[2-6]|$)'
-        matches = re.findall(section_pattern, html_content, re.DOTALL)
+        response = self._make_request(self.search_url, params)
+        if not response:
+            return []
         
-        for i, match in enumerate(matches[:10]):  # Limit to 10 sections
-            # Clean HTML tags
-            clean_content = re.sub(r'<[^>]+>', '', match)
-            if clean_content.strip():
-                sections.append({
-                    'title': f'Section {i+1}',
-                    'content': clean_content.strip()[:500]  # Limit content length
-                })
-        
-        return sections
+        try:
+            data = response.json()
+            pages = data.get('query', {}).get('pages', {})
+            page_data = pages.get(str(page_id))
+            
+            if not page_data:
+                return []
+            
+            content = page_data.get('revisions', [{}])[0].get('slots', {}).get('main', {}).get('content', '')
+            
+            # Parse MediaWiki markup to extract sections
+            sections = []
+            current_section = {'title': 'Introduction', 'content': ''}
+            
+            lines = content.split('\n')
+            for line in lines:
+                line = line.strip()
+                
+                # Check for section headers (== Header ==)
+                if line.startswith('==') and line.endswith('=='):
+                    # Save previous section if it has content
+                    if current_section['content'].strip():
+                        sections.append(current_section)
+                    
+                    # Start new section
+                    section_title = line.strip('= ').strip()
+                    current_section = {'title': section_title, 'content': ''}
+                
+                # Add content to current section
+                elif line and not line.startswith('{{') and not line.startswith('|'):
+                    current_section['content'] += line + ' '
+            
+            # Add the last section
+            if current_section['content'].strip():
+                sections.append(current_section)
+            
+            # Clean and limit sections
+            cleaned_sections = []
+            for section in sections[:8]:  # Limit to 8 sections
+                content = section['content'].strip()
+                if len(content) > 50:  # Only include sections with substantial content
+                    cleaned_sections.append({
+                        'title': section['title'],
+                        'content': content[:500]  # Limit content length
+                    })
+            
+            return cleaned_sections
+            
+        except Exception as e:
+            self.logger.error(f"Failed to extract content sections: {e}")
+            return []
     
     def _extract_references_and_citations(self, page_id: int) -> Tuple[List[str], List[Dict[str, str]]]:
-        """Extract references and citations from a Wikipedia page."""
+        """Extract references and citations from a Wikipedia page using MediaWiki Action API."""
         # Get page content for references
         params = {
             'action': 'query',
             'format': 'json',
-            'prop': 'revisions',
             'pageids': page_id,
+            'prop': 'revisions|links|extlinks',
             'rvprop': 'content',
-            'rvslots': 'main'
+            'rvslots': 'main',
+            'lllimit': 50,  # Limit internal links
+            'ellimit': 50   # Limit external links
         }
         
         response = self._make_request(self.search_url, params)
@@ -294,24 +374,75 @@ class WikipediaHandler:
         
         try:
             data = response.json()
-            content = data.get('query', {}).get('pages', {}).get(str(page_id), {}).get('revisions', [{}])[0].get('slots', {}).get('main', {}).get('content', '')
+            pages = data.get('query', {}).get('pages', {})
+            page_data = pages.get(str(page_id))
             
-            # Extract references (basic pattern matching)
-            references = re.findall(r'<ref[^>]*>(.*?)</ref>', content)
+            if not page_data:
+                return [], []
+            
+            # Extract internal links (potential references)
+            references = []
+            for link in page_data.get('links', []):
+                link_title = link.get('title', '')
+                if not link_title.startswith('Category:') and not link_title.startswith('File:'):
+                    references.append(link_title)
+            
+            # Extract external links (citations)
             citations = []
+            for ext_link in page_data.get('extlinks', []):
+                url = ext_link.get('*', '')
+                if url and url.startswith('http'):
+                    # Try to extract a meaningful title from the URL
+                    title = url.split('/')[-1] if url.split('/')[-1] else url.split('/')[-2] if len(url.split('/')) > 2 else 'External Link'
+                    title = title.replace('_', ' ').replace('-', ' ').title()
+                    
+                    citations.append({
+                        'url': url,
+                        'title': title,
+                        'type': 'external_link'
+                    })
             
-            # Extract external links that might be citations
-            external_links = re.findall(r'\[(https?://[^\s\]]+)\s+([^\]]+)\]', content)
-            for url, title in external_links[:20]:  # Limit to 20 citations
-                citations.append({
-                    'url': url,
-                    'title': title.strip(),
-                    'type': 'external_link'
-                })
+            # Also try to extract references from the content if we have it
+            if 'revisions' in page_data:
+                content = page_data.get('revisions', [{}])[0].get('slots', {}).get('main', {}).get('content', '')
+                
+                # Extract reference tags
+                ref_matches = re.findall(r'<ref[^>]*>(.*?)</ref>', content, re.DOTALL)
+                for ref in ref_matches:
+                    # Clean the reference content
+                    clean_ref = re.sub(r'<[^>]+>', '', ref).strip()
+                    if clean_ref and len(clean_ref) > 10:  # Only include substantial references
+                        references.append(clean_ref[:200])  # Limit length
+                
+                # Extract citation patterns
+                citation_patterns = [
+                    r'\[(https?://[^\s\]]+)\s+([^\]]+)\]',  # [url title]
+                    r'\[(https?://[^\s\]]+)\]',  # [url]
+                ]
+                
+                for pattern in citation_patterns:
+                    matches = re.findall(pattern, content)
+                    for match in matches:
+                        if isinstance(match, tuple):
+                            url, title = match
+                        else:
+                            url = match
+                            title = url.split('/')[-1] if url.split('/')[-1] else 'External Link'
+                        
+                        if url not in [c['url'] for c in citations]:  # Avoid duplicates
+                            citations.append({
+                                'url': url,
+                                'title': title.strip(),
+                                'type': 'citation'
+                            })
+            
+            # Limit results to avoid overwhelming
+            references = references[:30]  # Limit to 30 references
+            citations = citations[:20]   # Limit to 20 citations
             
             return references, citations
             
-        except (json.JSONDecodeError, KeyError) as e:
+        except Exception as e:
             self.logger.error(f"Failed to extract references: {e}")
             return [], []
     
