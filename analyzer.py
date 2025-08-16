@@ -10,14 +10,21 @@ import networkx as nx
 from typing import List, Dict, Any
 
 # Import secure logging from centralized module
-from secure_logging import secure_log
+from secure_logging import ZeroSensitiveLogger, SafeLogContext
+
+# Initialize zero-sensitive logger
+logger = ZeroSensitiveLogger("analyzer")
 
 WIKILINK_RE = re.compile(r"\[\[([^|\]]+)")
 
 
 def fetch_all_notes(session, api_url: str, timeout: int) -> List[str]:
     """Fetches a list of all markdown files by recursively traversing the vault."""
-    secure_log("info", "Fetching all notes by recursively traversing the vault...")
+    logger.info("Fetching all notes by recursively traversing the vault", SafeLogContext(
+        operation="notes_fetch",
+        status="started",
+        metadata={"api_url": api_url}
+    ))
 
     all_markdown_files: set[str] = set()
     # The queue will store directory paths WITHOUT trailing slashes.
@@ -31,7 +38,11 @@ def fetch_all_notes(session, api_url: str, timeout: int) -> List[str]:
             continue
         scanned_dirs.add(current_dir_no_slash)
 
-        secure_log("debug", f"Scanning directory: '{current_dir_no_slash if current_dir_no_slash else '/'}'")
+        logger.debug("Scanning directory", SafeLogContext(
+            operation="directory_scan",
+            status="scanning",
+            metadata={"current_dir": current_dir_no_slash if current_dir_no_slash else "/"}
+        ))
         try:
             encoded_path = urllib.parse.quote(current_dir_no_slash)
 
@@ -52,16 +63,35 @@ def fetch_all_notes(session, api_url: str, timeout: int) -> List[str]:
                 elif full_item_path.endswith(".md"):
                     all_markdown_files.add(full_item_path)
         except requests.exceptions.RequestException as e:
-            secure_log("error", f"Error fetching contents of directory '{current_dir_no_slash}/': {e}")
+            logger.error("Error fetching directory contents", SafeLogContext(
+                operation="directory_fetch",
+                status="failed",
+                metadata={
+                    "directory": current_dir_no_slash,
+                    "error_type": type(e).__name__
+                }
+            ))
             continue
 
     if not all_markdown_files:
-        secure_log("warning", "No markdown notes found in the vault.")
+        logger.warning("No markdown notes found", SafeLogContext(
+            operation="notes_fetch",
+            status="completed",
+            metadata={"note_count": 0}
+        ))
         sys.exit(0)
 
     final_list = sorted(list(all_markdown_files))
-    secure_log("info", f"Found {len(final_list)} markdown notes.")
-    secure_log("debug", f"Full list of markdown files found: {final_list}")
+    logger.info("Notes fetch completed", SafeLogContext(
+        operation="notes_fetch",
+        status="completed",
+        metadata={"note_count": len(final_list)}
+    ))
+    logger.debug("Full list of markdown files", SafeLogContext(
+        operation="notes_fetch",
+        status="completed",
+        metadata={"file_list": final_list}
+    ))
     return final_list
 
 
@@ -69,7 +99,11 @@ def build_note_graph(
     session, api_url: str, markdown_files: List[str], timeout: int
 ) -> nx.DiGraph:
     """Builds a directed graph of notes and their links."""
-    secure_log("info", f"Building note graph for {len(markdown_files)} files...")
+    logger.info("Building note graph", SafeLogContext(
+        operation="graph_build",
+        status="started",
+        metadata={"file_count": len(markdown_files)}
+    ))
     graph = nx.DiGraph()
 
     # Map from full link path (e.g., "Folder/Note") to full file path ("Folder/Note.md")
@@ -87,7 +121,15 @@ def build_note_graph(
         basename_map[basename].append(note_path)
 
     for i, note_path in enumerate(markdown_files):
-        secure_log("debug", f"Processing note {i + 1}/{len(markdown_files)}: {note_path}")
+        logger.debug("Processing note", SafeLogContext(
+            operation="note_process",
+            status="processing",
+            metadata={
+                "note_index": i + 1,
+                "total_notes": len(markdown_files),
+                "note_path": note_path
+            }
+        ))
         try:
             # Per API docs, use the /vault/{filename} endpoint to get note content.
             encoded_note_path = urllib.parse.quote(note_path)
@@ -118,9 +160,20 @@ def build_note_graph(
                         graph.add_node(link_target, type="stub")
                     graph.add_edge(note_path, link_target)
         except requests.exceptions.RequestException as e:
-            secure_log("warning", f"Could not fetch content for '{note_path}': {e}")
+            logger.warning("Could not fetch note content", SafeLogContext(
+                operation="note_fetch",
+                status="failed",
+                metadata={
+                    "note_path": note_path,
+                    "error_type": type(e).__name__
+                }
+            ))
 
-    secure_log("info", "Graph construction complete.")
+    logger.info("Graph construction completed", SafeLogContext(
+        operation="graph_build",
+        status="completed",
+        metadata={"node_count": len(graph.nodes), "edge_count": len(graph.edges)}
+    ))
     return graph
 
 
@@ -128,7 +181,11 @@ def analyze_graph(
     graph: nx.DiGraph, hub_threshold: int, link_density_threshold: float, min_word_count: int
 ) -> Dict[str, Any]:
     """Analyzes the graph to find orphans, stubs, and their sources."""
-    secure_log("info", "Analyzing note graph...")
+    logger.info("Analyzing note graph", SafeLogContext(
+        operation="graph_analysis",
+        status="started",
+        metadata={"node_count": len(graph.nodes), "edge_count": len(graph.edges)}
+    ))
     all_nodes = list(graph.nodes(data=True))
     notes = [n for n, d in all_nodes if d.get("type") == "note"]
     stubs = [n for n, d in all_nodes if d.get("type") == "stub"]
@@ -274,11 +331,26 @@ def run_analysis_process(
         graph, hub_threshold, link_density_threshold, min_word_count
     )
 
-    secure_log("info", f"Writing report to {output_file}...")
+    logger.info("Writing analysis report", SafeLogContext(
+        operation="report_write",
+        status="started",
+        metadata={"output_file": output_file}
+    ))
     try:
         with open(output_file, "w", encoding="utf-8") as f:
             print_report(analysis, hub_threshold=hub_threshold, output_stream=f)
-        secure_log("info", f"Report successfully written to {output_file}")
+        logger.info("Report written successfully", SafeLogContext(
+            operation="report_write",
+            status="completed",
+            metadata={"output_file": output_file}
+        ))
     except IOError as e:
-        secure_log("error", f"Could not write report to file {output_file}: {e}")
+        logger.error("Failed to write report", SafeLogContext(
+            operation="report_write",
+            status="failed",
+            metadata={
+                "output_file": output_file,
+                "error_type": type(e).__name__
+            }
+        ))
         sys.exit(1)

@@ -10,7 +10,10 @@ from pypdf import PdfReader
 from typing import List, Dict, TypedDict, Literal
 
 # Import secure logging from centralized module
-from secure_logging import secure_log
+from secure_logging import ZeroSensitiveLogger, SafeLogContext
+
+# Initialize zero-sensitive logger
+logger = ZeroSensitiveLogger("ingest")
 
 
 class Note(TypedDict):
@@ -22,7 +25,7 @@ class Note(TypedDict):
 
 def read_file_content(file_path: str) -> str:
     """Reads content from a .txt or .pdf file."""
-    secure_log("info", f"Reading content from {file_path}...")
+    logger.log_file_operation("read", file_path, success=True)
     try:
         if file_path.lower().endswith(".txt"):
             with open(file_path, "r", encoding="utf-8") as f:
@@ -34,10 +37,18 @@ def read_file_content(file_path: str) -> str:
                 text += page.extract_text() + "\n"
             return text
         else:
-            secure_log("warning", f"Unsupported file type: {file_path}. Skipping.")
+            logger.warning("Unsupported file type", SafeLogContext(
+                operation="file_read",
+                status="skipped",
+                metadata={"file_path": file_path, "reason": "unsupported_type"}
+            ))
             return ""
     except Exception as e:
-        secure_log("error", f"Failed to read file {file_path}: {e}")
+        logger.error("Failed to read file", SafeLogContext(
+            operation="file_read",
+            status="failed",
+            metadata={"file_path": file_path, "error_type": type(e).__name__}
+        ))
         return ""
 
 
@@ -75,10 +86,18 @@ def analyze_with_gemini(model, text_content: str) -> List[Note]:
     evergreen-style notes for Obsidian.
     """
     if not text_content.strip():
-        secure_log("warning", "Skipping Gemini analysis for empty content.")
+        logger.warning("Skipping Gemini analysis", SafeLogContext(
+            operation="gemini_analysis",
+            status="skipped",
+            metadata={"reason": "empty_content"}
+        ))
         return []
 
-    secure_log("info", "Sending content to Gemini for analysis. This may take a moment...")
+    logger.info("Sending content to Gemini for analysis", SafeLogContext(
+        operation="gemini_analysis",
+        status="started",
+        metadata={"content_length": len(text_content)}
+    ))
 
     # --- START OF REVISED PROMPT ---
     prompt = f"""
@@ -175,7 +194,7 @@ def create_notes_in_vault(
         note_path = os.path.join(output_folder, f"{sanitized_title}.md").replace("\\", "/")
 
         try:
-            secure_log("info", f"Creating note: {note_path}")
+            logger.log_file_operation("create", note_path, success=True, file_size=len(content))
             encoded_path = urllib.parse.quote(note_path)
             response = session.put(
                 f"{api_url}/vault/{encoded_path}",
@@ -188,12 +207,32 @@ def create_notes_in_vault(
             # Log connectivity information
             wikilinks = re.findall(r'\[\[([^\]]+)\]\]', content)
             if wikilinks:
-                secure_log("info", f"Note '{title}' contains {len(wikilinks)} wikilinks: {', '.join(wikilinks)}")
+                logger.info("Note created with wikilinks", SafeLogContext(
+                    operation="note_create",
+                    status="success",
+                    metadata={
+                        "title": title,
+                        "wikilink_count": len(wikilinks),
+                        "wikilinks": wikilinks
+                    }
+                ))
             else:
-                secure_log("info", f"Note '{title}' has no wikilinks")
+                logger.info("Note created without wikilinks", SafeLogContext(
+                    operation="note_create",
+                    status="success",
+                    metadata={"title": title, "wikilink_count": 0}
+                ))
                 
         except requests.exceptions.RequestException as e:
-            secure_log("error", f"Failed to create note '{note_path}': {e}")
+            logger.error("Failed to create note", SafeLogContext(
+                operation="note_create",
+                status="failed",
+                metadata={
+                    "title": title,
+                    "file_path": note_path,
+                    "error_type": type(e).__name__
+                }
+            ))
 
 
 def run_ingest_process(
@@ -211,10 +250,18 @@ def run_ingest_process(
     genai.configure(api_key=gemini_api_key)
     model = genai.GenerativeModel(model_name)
     
-    secure_log("info", f"Using Gemini model: {model_name}")
+    logger.info("Gemini model configured", SafeLogContext(
+        operation="gemini_config",
+        status="success",
+        metadata={"model_name": model_name}
+    ))
 
     if not os.path.isdir(ingest_folder):
-        secure_log("error", f"Ingest folder not found: {ingest_folder}")
+        logger.error("Ingest folder not found", SafeLogContext(
+            operation="ingest_process",
+            status="failed",
+            metadata={"ingest_folder": ingest_folder, "error_type": "folder_not_found"}
+        ))
         sys.exit(1)
 
     processed_files = []
@@ -224,10 +271,18 @@ def run_ingest_process(
         file_path = os.path.join(ingest_folder, filename)
         if os.path.isfile(file_path):
             try:
-                secure_log("info", f"Processing file: {filename}")
+                logger.info("Processing file", SafeLogContext(
+                    operation="file_process",
+                    status="started",
+                    metadata={"filename": filename, "file_path": file_path}
+                ))
                 content = read_file_content(file_path)
                 if not content:
-                    secure_log("warning", f"Skipping {filename} due to empty content")
+                    logger.warning("Skipping file due to empty content", SafeLogContext(
+                        operation="file_process",
+                        status="skipped",
+                        metadata={"filename": filename, "reason": "empty_content"}
+                    ))
                     failed_files.append(file_path)
                     continue
                 
@@ -238,34 +293,73 @@ def run_ingest_process(
                     structure_count = sum(1 for note in decomposed_notes if note.get("type") == "structure")
                     total_wikilinks = sum(len(re.findall(r'\[\[([^\]]+)\]\]', note.get("content", ""))) for note in decomposed_notes)
                     
-                    secure_log("info", f"Generated {len(decomposed_notes)} notes from {filename}:")
-                    secure_log("info", f"  - {atomic_count} atomic notes")
-                    secure_log("info", f"  - {structure_count} structure notes")
-                    secure_log("info", f"  - {total_wikilinks} total wikilinks for connectivity")
+                    logger.info("Notes generated successfully", SafeLogContext(
+                        operation="note_generation",
+                        status="success",
+                        metadata={
+                            "filename": filename,
+                            "total_notes": len(decomposed_notes),
+                            "atomic_notes": atomic_count,
+                            "structure_notes": structure_count,
+                            "total_wikilinks": total_wikilinks
+                        }
+                    ))
                     
                     create_notes_in_vault(session, api_url, decomposed_notes, notes_folder, timeout)
                     processed_files.append(file_path)
-                    secure_log("info", f"Successfully processed {filename}")
+                    logger.info("File processed successfully", SafeLogContext(
+                        operation="file_process",
+                        status="completed",
+                        metadata={"filename": filename, "notes_created": len(decomposed_notes)}
+                    ))
                 else:
-                    secure_log("warning", f"No notes generated from {filename}")
+                    logger.warning("No notes generated", SafeLogContext(
+                        operation="note_generation",
+                        status="failed",
+                        metadata={"filename": filename, "reason": "no_notes_generated"}
+                    ))
                     failed_files.append(file_path)
             except Exception as e:
-                secure_log("error", f"Failed to process {filename}: {e}")
+                logger.error("Failed to process file", SafeLogContext(
+                    operation="file_process",
+                    status="failed",
+                    metadata={"filename": filename, "error_type": type(e).__name__}
+                ))
                 failed_files.append(file_path)
 
     # Delete successfully processed files if requested
     if delete_after_ingest and processed_files:
-        secure_log("info", f"Deleting {len(processed_files)} successfully processed files...")
+        logger.info("Deleting processed files", SafeLogContext(
+            operation="file_cleanup",
+            status="started",
+            metadata={"file_count": len(processed_files)}
+        ))
         for file_path in processed_files:
             try:
                 os.remove(file_path)
-                secure_log("debug", f"Deleted: {file_path}")
+                logger.log_file_operation("delete", file_path, success=True)
             except OSError as e:
-                secure_log("error", f"Failed to delete {file_path}: {e}")
+                logger.error("Failed to delete file", SafeLogContext(
+                    operation="file_cleanup",
+                    status="failed",
+                    metadata={"file_path": file_path, "error_type": type(e).__name__}
+                ))
         
-        secure_log("info", f"Successfully deleted {len(processed_files)} files from ingest folder")
+        logger.info("File cleanup completed", SafeLogContext(
+            operation="file_cleanup",
+            status="completed",
+            metadata={"files_deleted": len(processed_files)}
+        ))
     
     if failed_files:
-        secure_log("warning", f"{len(failed_files)} files failed processing and were not deleted")
+        logger.warning("Some files failed processing", SafeLogContext(
+            operation="ingest_summary",
+            status="partial_failure",
+            metadata={"failed_count": len(failed_files), "success_count": len(processed_files)}
+        ))
         for file_path in failed_files:
-            secure_log("debug", f"Failed file: {file_path}")
+            logger.debug("Failed file", SafeLogContext(
+                operation="ingest_summary",
+                status="failed",
+                metadata={"file_path": file_path}
+            ))

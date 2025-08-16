@@ -7,7 +7,10 @@ from dotenv import load_dotenv
 from typing import Tuple, Dict
 
 # Import secure logging from centralized module
-from secure_logging import secure_log
+from secure_logging import ZeroSensitiveLogger, SafeLogContext
+
+# Initialize zero-sensitive logger
+logger = ZeroSensitiveLogger("utils")
 
 
 def load_config() -> Tuple[str, str, str, str]:
@@ -17,7 +20,11 @@ def load_config() -> Tuple[str, str, str, str]:
     dotenv_path = os.path.join(project_root, ".vscode", ".env")
 
     if not os.path.exists(dotenv_path):
-        secure_log("error", f"Configuration file not found at '{dotenv_path}'")
+        logger.error("Configuration file not found", SafeLogContext(
+            operation="config_load",
+            status="failed",
+            metadata={"file_path": dotenv_path, "error_type": "file_not_found"}
+        ))
         sys.exit(1)
 
     load_dotenv(dotenv_path=dotenv_path)
@@ -34,9 +41,11 @@ def load_config() -> Tuple[str, str, str, str]:
     }
     missing_vars = [var for var, value in required_vars.items() if not value]
     if missing_vars:
-        secure_log("error", "The following required environment variables are missing from your .vscode/.env file:")
-        for var in missing_vars:
-            secure_log("error", f"  - {var}")
+        logger.error("Required environment variables missing", SafeLogContext(
+            operation="config_validate",
+            status="failed",
+            metadata={"missing_vars": missing_vars, "config_file": dotenv_path}
+        ))
         sys.exit(1)
 
     obsidian_api_key = fetch_api_key_from_1password(api_key_ref)
@@ -56,12 +65,18 @@ def fetch_api_key_from_1password(secret_reference: str) -> str:
         )
         return result.stdout.strip()
     except FileNotFoundError:
-        secure_log("error",
-            "1Password CLI ('op') not found. Please install it from https://developer.1password.com/docs/cli/"
-        )
+        logger.error("1Password CLI not found", SafeLogContext(
+            operation="1password_fetch",
+            status="failed",
+            metadata={"error_type": "FileNotFoundError", "cli_tool": "op"}
+        ))
         sys.exit(1)
     except subprocess.CalledProcessError as e:
-        secure_log("error", f"Error fetching secret from 1Password:\n{e.stderr}")
+        logger.error("Error fetching secret from 1Password", SafeLogContext(
+            operation="1password_fetch",
+            status="failed",
+            metadata={"error_type": "CalledProcessError", "stderr_length": len(e.stderr) if e.stderr else 0}
+        ))
         sys.exit(1)
 
 
@@ -75,7 +90,7 @@ def create_api_session(api_key: str) -> requests.Session:
 def verify_connection(session: requests.Session, api_url: str, timeout: int) -> None:
     """Verifies connection to the Obsidian API and prints vault info."""
     try:
-        secure_log("info", f"Connecting to Obsidian API at {api_url}...")
+        logger.log_api_operation("GET", api_url, "connecting", has_auth=True)
         response = session.get(api_url, timeout=timeout)
         response.raise_for_status()
 
@@ -91,16 +106,36 @@ def verify_connection(session: requests.Session, api_url: str, timeout: int) -> 
             if not all([service_name, obsidian_version, api_version]):
                 raise ValueError("Incomplete version/manifest info in API response.")
 
-            secure_log("info", f"Successfully connected to service: '{service_name}'")
-            secure_log("info", f"Obsidian v{obsidian_version}, API v{api_version}")
+            logger.log_api_operation("GET", api_url, "success", has_auth=True, response_size=len(response.text))
+            logger.info("Successfully connected to Obsidian API", SafeLogContext(
+                operation="connection_verify",
+                status="success",
+                metadata={
+                    "service_name": service_name,
+                    "obsidian_version": obsidian_version,
+                    "api_version": api_version
+                }
+            ))
 
         except (requests.exceptions.JSONDecodeError, ValueError):
-            secure_log("error", "The API response from the root endpoint was not in the expected format.")
-            secure_log("error", "Please ensure the Obsidian Local REST API plugin is up-to-date and enabled correctly.")
-            # Redact response body to avoid logging sensitive content
-            secure_log("error", f"Received response body: [REDACTED - {len(response.text)} characters]")
+            logger.error("API response format invalid", SafeLogContext(
+                operation="connection_verify",
+                status="failed",
+                metadata={
+                    "error_type": "InvalidResponseFormat",
+                    "response_size": len(response.text),
+                    "endpoint": api_url
+                }
+            ))
             sys.exit(1)
     except requests.exceptions.RequestException as e:
-        secure_log("error", f"Error during vault connection: {e}")
-        secure_log("error", "Please ensure Obsidian is running and the Local REST API plugin is enabled.")
+        logger.error("Vault connection failed", SafeLogContext(
+            operation="connection_verify",
+            status="failed",
+            metadata={
+                "error_type": type(e).__name__,
+                "endpoint": api_url,
+                "timeout": timeout
+            }
+        ))
         sys.exit(1)
