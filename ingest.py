@@ -148,12 +148,19 @@ def analyze_with_gemini(model, text_content: str) -> List[Note]:
         try:
             return json.loads(cleaned_response)
         except json.JSONDecodeError:
-                    secure_log("error", "Failed to parse JSON response from Gemini.")
-        secure_log("debug", f"Invalid JSON received: {cleaned_response}")
-        return []
+            logger.error("Failed to parse JSON response from Gemini", SafeLogContext(
+                operation="gemini_parse",
+                status="failed",
+                metadata={"response_length": len(cleaned_response) if cleaned_response else 0}
+            ))
+            return []
 
     except Exception as e:
-        secure_log("error", f"An error occurred during Gemini API call: {e}")
+        logger.error("Gemini API call failed", SafeLogContext(
+            operation="gemini_api_call",
+            status="failed",
+            metadata={"error_type": type(e).__name__}
+        ))
         return []
 
 
@@ -166,17 +173,29 @@ def create_notes_in_vault(
 ):
     """Creates new notes in the Obsidian vault using the API."""
     if not notes_to_create:
-        secure_log("info", "No new notes to create.")
+        logger.info("No new notes to create", SafeLogContext(
+            operation="notes_creation",
+            status="skipped",
+            metadata={"reason": "no_notes"}
+        ))
         return
 
-    secure_log("info", f"Creating {len(notes_to_create)} new notes in vault...")
+    logger.info("Creating notes in vault", SafeLogContext(
+        operation="notes_creation",
+        status="started",
+        metadata={"note_count": len(notes_to_create)}
+    ))
     for note in notes_to_create:
         title = note.get("title")
         content = note.get("content")
         note_type = note.get("type", "atomic")  # Default to atomic if type is missing
 
         if not title or not content:
-            secure_log("warning", f"Skipping note with missing title or content: {note}")
+            logger.warning("Skipping note with missing data", SafeLogContext(
+                operation="note_validation",
+                status="skipped",
+                metadata={"reason": "missing_title_or_content", "note_keys": list(note.keys())}
+            ))
             continue
 
         # Clean wikilinks to remove quotes and ensure proper format
@@ -185,9 +204,17 @@ def create_notes_in_vault(
         
         # Log if any wikilinks were cleaned
         if original_content != content:
-            secure_log("info", f"Cleaned wikilinks in note '{title}'")
+            logger.info("Wikilinks cleaned in note", SafeLogContext(
+                operation="wikilink_cleanup",
+                status="completed",
+                metadata={"title": title}
+            ))
         
-        secure_log("info", f"Creating {note_type} note: {title}")
+        logger.info("Creating note", SafeLogContext(
+            operation="note_create",
+            status="started",
+            metadata={"title": title, "note_type": note_type}
+        ))
 
         # Sanitize title to create a valid filename
         sanitized_title = re.sub(r'[\\/*?:"<>|]', "", title)

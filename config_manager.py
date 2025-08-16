@@ -275,14 +275,28 @@ class ConfigManager:
                 try:
                     secrets["obsidian_api_key"] = self._fetch_1password_secret(secrets["obsidian_api_key_ref"])
                 except Exception as e:
-                    secure_log("warning", f"Failed to fetch Obsidian API key from 1Password: {e}")
+                    self.logger.warning("Failed to fetch Obsidian API key from 1Password", SafeLogContext(
+                        operation="1password_fetch",
+                        status="failed",
+                        metadata={
+                            "key_type": "obsidian_api_key",
+                            "error_type": type(e).__name__
+                        }
+                    ))
                     secrets["obsidian_api_key"] = ""
             
             if secrets.get("gemini_api_key_ref"):
                 try:
                     secrets["gemini_api_key"] = self._fetch_1password_secret(secrets["gemini_api_key_ref"])
                 except Exception as e:
-                    secure_log("warning", f"Failed to fetch Gemini API key from 1Password: {e}")
+                    self.logger.warning("Failed to fetch Gemini API key from 1Password", SafeLogContext(
+                        operation="1password_fetch",
+                        status="failed",
+                        metadata={
+                            "key_type": "gemini_api_key",
+                            "error_type": type(e).__name__
+                        }
+                    ))
                     secrets["gemini_api_key"] = ""
             
             self._secrets_cache = secrets
@@ -335,7 +349,11 @@ class ConfigManager:
             with open(self.secrets_file, 'wb') as f:
                 f.write(encrypted_data)
         except Exception as e:
-            secure_log("error", f"Failed to save encrypted secrets: {e}")
+            self.logger.error("Failed to save encrypted secrets", SafeLogContext(
+                operation="secrets_save",
+                status="failed",
+                metadata={"error_type": type(e).__name__}
+            ))
             raise
     
     def _save_1password_references(self, secrets: Dict[str, Any]) -> None:
@@ -563,7 +581,11 @@ class ConfigManager:
                 if master_password:
                     self.save_secrets(import_data["secrets"], master_password)
                 else:
-                    secure_log("warning", "Secrets found but no master password provided")
+                    self.logger.warning("Secrets found but no master password provided", SafeLogContext(
+                        operation="config_import",
+                        status="warning",
+                        metadata={"reason": "no_master_password"}
+                    ))
             
             return True
             
