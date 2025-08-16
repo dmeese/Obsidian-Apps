@@ -13,7 +13,6 @@
     "delete_after_ingest": false
   },
   "security": {
-    "method": "1password",
-    "encryption_algorithm": "AES-256-GCM"
+    "method": "1password"
   }
 }

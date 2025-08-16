@@ -54,7 +54,7 @@ class ConfigManager:
                 "delete_after_ingest": True
             },
             "security": {
-                "method": "local_encrypted",  # or "1password"
+                "method": "simple",  # Changed default to simple
                 "encryption_algorithm": "AES-256-GCM"
             }
         }
@@ -134,7 +134,7 @@ class ConfigManager:
             return self._secrets_cache
             
         config = self.load_config()
-        security_method = config.get("security", {}).get("method", "local_encrypted")
+        security_method = config.get("security", {}).get("method", "simple")
         
         if security_method == "1password":
             return self._load_1password_secrets(master_password)
@@ -142,6 +142,8 @@ class ConfigManager:
             if not master_password:
                 raise ValueError("Master password required for local encrypted storage")
             return self._load_encrypted_secrets(master_password)
+        elif security_method == "simple":
+            return self._load_simple_secrets()
         else:
             raise ValueError(f"Unsupported security method: {security_method}")
     
@@ -197,6 +199,23 @@ class ConfigManager:
                     except:
                         pass
             
+            # Also try to load from a JSON secrets file (for 1Password method)
+            json_secrets_file = self.config_dir / "secrets.json"
+            if json_secrets_file.exists():
+                try:
+                    with open(json_secrets_file, 'r') as f:
+                        saved_secrets = json.load(f)
+                    if saved_secrets.get("obsidian_api_key_ref"):
+                        secrets["obsidian_api_key_ref"] = saved_secrets["obsidian_api_key_ref"]
+                    if saved_secrets.get("gemini_api_key_ref"):
+                        secrets["gemini_api_key_ref"] = saved_secrets["gemini_api_key_ref"]
+                except Exception as e:
+                    self.logger.warning("Failed to load JSON secrets file", SafeLogContext(
+                        operation="json_secrets_load",
+                        status="failed",
+                        metadata={"error_type": type(e).__name__}
+                    ))
+            
             # Fallback to environment variables if no saved references
             if not secrets.get("obsidian_api_key_ref"):
                 obsidian_ref = os.getenv("OBSIDIAN_API_KEY_REF")
@@ -248,6 +267,51 @@ class ConfigManager:
             ))
             raise
     
+    def _load_simple_secrets(self) -> Dict[str, Any]:
+        """Load secrets from simple JSON file (like the original system)."""
+        try:
+            # Try to load from a simple secrets file
+            simple_secrets_file = self.config_dir / "secrets.json"
+            
+            if simple_secrets_file.exists():
+                with open(simple_secrets_file, 'r') as f:
+                    secrets = json.load(f)
+                    self._secrets_cache = secrets
+                    return secrets
+            
+            # If no simple secrets file exists, try to load from environment variables
+            secrets = self.get_default_secrets()
+            
+            # Check environment variables for API keys
+            obsidian_key = os.getenv("OBSIDIAN_API_KEY")
+            if obsidian_key:
+                secrets["obsidian_api_key"] = obsidian_key
+            
+            gemini_key = os.getenv("GEMINI_API_KEY")
+            if gemini_key:
+                secrets["gemini_api_key"] = gemini_key
+            
+            # Check environment variables for 1Password references
+            obsidian_ref = os.getenv("OBSIDIAN_API_KEY_REF")
+            if obsidian_ref:
+                secrets["obsidian_api_key_ref"] = obsidian_ref
+            
+            gemini_ref = os.getenv("GEMINI_API_KEY_REF")
+            if gemini_ref:
+                secrets["gemini_api_key_ref"] = gemini_ref
+            
+            self._secrets_cache = secrets
+            return secrets
+            
+        except Exception as e:
+            self.logger.error("Failed to load simple secrets", SafeLogContext(
+                operation="simple_secrets_load",
+                status="failed",
+                metadata={"error_type": type(e).__name__}
+            ))
+            # Return default secrets on error
+            return self.get_default_secrets()
+    
     def _fetch_1password_secret(self, secret_reference: str) -> str:
         """Fetch a secret from 1Password using the op CLI."""
         try:
@@ -266,7 +330,7 @@ class ConfigManager:
     def save_secrets(self, secrets: Dict[str, Any], master_password: Optional[str] = None) -> None:
         """Save sensitive configuration data."""
         config = self.load_config()
-        security_method = config.get("security", {}).get("method", "local_encrypted")
+        security_method = config.get("security", {}).get("method", "simple")
         
         if security_method == "1password":
             # For 1Password, we only store references
@@ -275,6 +339,9 @@ class ConfigManager:
             if not master_password:
                 raise ValueError("Master password required for local encrypted storage")
             self._save_encrypted_secrets(secrets, master_password)
+        elif security_method == "simple":
+            # For simple method, save to plain JSON file
+            self._save_simple_secrets(secrets)
         else:
             raise ValueError(f"Unsupported security method: {security_method}")
         
@@ -317,6 +384,26 @@ class ConfigManager:
                 operation="secrets_save",
                 status="failed",
                 metadata={"error_type": type(e).__name__, "storage_type": "1password_refs"}
+            ))
+            raise
+    
+    def _save_simple_secrets(self, secrets: Dict[str, Any]) -> None:
+        """Save secrets to simple JSON file."""
+        try:
+            simple_secrets_file = self.config_dir / "secrets.json"
+            with open(simple_secrets_file, 'w') as f:
+                json.dump(secrets, f, indent=2)
+                
+            self.logger.info("Simple secrets saved", SafeLogContext(
+                operation="secrets_save",
+                status="success",
+                metadata={"storage_type": "simple_json"}
+            ))
+        except Exception as e:
+            self.logger.error("Failed to save simple secrets", SafeLogContext(
+                operation="secrets_save",
+                status="failed",
+                metadata={"error_type": type(e).__name__, "storage_type": "simple_json"}
             ))
             raise
     
@@ -405,7 +492,7 @@ class ConfigManager:
             # Validate security method
             security_config = config.get("security", {})
             method = security_config.get("method")
-            if method not in ["local_encrypted", "1password"]:
+            if method not in ["local_encrypted", "1password", "simple"]:
                 errors.append("Invalid security method")
             
             # Try to load secrets to validate them
@@ -415,10 +502,16 @@ class ConfigManager:
                     pass
                 elif method == "1password":
                     secrets = self._load_1password_secrets()
-                    if not secrets.get("obsidian_api_key") and not secrets.get("obsidian_api_key_ref"):
-                        errors.append("Obsidian API key or reference is required")
-                    if not secrets.get("gemini_api_key") and not secrets.get("gemini_api_key_ref"):
-                        errors.append("Gemini API key or reference is required")
+                    if not secrets.get("obsidian_api_key_ref"):
+                        errors.append("Obsidian API key reference is required")
+                    if not secrets.get("gemini_api_key_ref"):
+                        errors.append("Gemini API key reference is required")
+                elif method == "simple":
+                    secrets = self._load_simple_secrets()
+                    if not secrets.get("obsidian_api_key"):
+                        errors.append("Obsidian API key is required")
+                    if not secrets.get("gemini_api_key"):
+                        errors.append("Gemini API key is required")
             except Exception as e:
                 errors.append(f"Failed to validate secrets: {e}")
             

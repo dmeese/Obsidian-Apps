@@ -125,11 +125,14 @@ class ObsidianClient:
     def get_note_content(self, note_path: str) -> Optional[str]:
         """Get the content of a specific note."""
         try:
-            response = self.session.get(f"{self.api_url}/vault/notes/{note_path}", timeout=self.timeout)
+            # Use the working endpoint from analyzer.py: /vault/{filename}
+            # Also set Accept header to get markdown content
+            headers = {"Accept": "text/markdown"}
+            response = self.session.get(f"{self.api_url}/vault/{note_path}", headers=headers, timeout=self.timeout)
             response.raise_for_status()
             
-            note_data = response.json()
-            content = note_data.get('content', '')
+            # For markdown content, response.text gives us the content directly
+            content = response.text
             
             self.logger.info("Note content retrieved successfully", SafeLogContext(
                 operation="note_content_fetch",

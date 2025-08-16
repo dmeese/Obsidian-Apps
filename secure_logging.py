@@ -64,10 +64,11 @@ class ZeroSensitiveLogger:
             r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',  # Email addresses
             r'\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b',  # Credit card numbers
             r'\b\d{3}-\d{2}-\d{4}\b',  # SSN pattern
-            r'password',  # Password-related terms
-            r'secret',    # Secret-related terms
-            r'key',       # Key-related terms
-            r'token',     # Token-related terms
+            # Only catch actual sensitive values, not descriptive text
+            r'\b(?:api_)?password\s*[:=]\s*[^\s]+',  # password: value or password=value
+            r'\b(?:api_)?secret\s*[:=]\s*[^\s]+',    # secret: value or secret=value
+            r'\b(?:api_)?key\s*[:=]\s*[^\s]+',       # key: value or key=value
+            r'\b(?:api_)?token\s*[:=]\s*[^\s]+',     # token: value or token=value
         ]
         
         # Compile patterns for efficiency
@@ -83,10 +84,62 @@ class ZeroSensitiveLogger:
         Returns:
             True if sensitive data is detected, False otherwise
         """
+        # Check for sensitive patterns
         for pattern in self.compiled_patterns:
             if pattern.search(message):
+                # Check if this is a false positive (safe terms)
+                if self._is_safe_term(message):
+                    continue
                 return True
         return False
+    
+    def _is_safe_term(self, message: str) -> bool:
+        """
+        Check if a message contains safe terms that might trigger false positives.
+        
+        Args:
+            message: The message to check
+            
+        Returns:
+            True if the message contains only safe terms, False otherwise
+        """
+        # Safe terms that might trigger pattern matching but are not sensitive
+        safe_terms = [
+            '1password', '1Password',  # 1Password service name
+            'references', 'reference',  # Reference terms
+            'saved', 'saving', 'load', 'loading',  # Operation terms
+            'success', 'failed', 'error', 'warning',  # Status terms
+            'operation', 'config', 'configuration',  # Config terms
+            'api', 'management', 'validation', 'completed', 'updated',  # Common safe terms
+        ]
+        
+        message_lower = message.lower()
+        
+        # Check if the message contains any of the safe terms
+        contains_safe_terms = any(term.lower() in message_lower for term in safe_terms)
+        
+        if not contains_safe_terms:
+            return False
+        
+        # If it contains safe terms, check if the remaining content is safe
+        # Remove safe terms and check if any sensitive patterns remain
+        remaining_content = message_lower
+        for safe_term in safe_terms:
+            remaining_content = remaining_content.replace(safe_term.lower(), '')
+        
+        # Clean up extra spaces and check if remaining content is safe
+        remaining_content = ' '.join(remaining_content.split())
+        
+        # If no remaining content or remaining content is safe, it's safe
+        if not remaining_content or remaining_content in ['', ' ', '  ']:
+            return True
+        
+        # Check if remaining content contains sensitive patterns
+        for pattern in self.compiled_patterns:
+            if pattern.search(remaining_content):
+                return False
+        
+        return True
     
     def _create_safe_reference(self, sensitive_value: str, reference_type: str = "hash") -> str:
         """
