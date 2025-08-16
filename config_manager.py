@@ -11,39 +11,8 @@ import base64
 import sys
 from datetime import datetime
 
-# Add secure logging function at the top
-def secure_log(level: str, message: str, sensitive_data: Dict[str, str] = None) -> None:
-    """
-    Secure logging function that redacts sensitive information.
-    
-    Args:
-        level: Log level (info, warning, error, debug)
-        message: Log message
-        sensitive_data: Dict of sensitive values to redact (e.g., {"api_key": "actual_key"})
-    """
-    if sensitive_data:
-        redacted_message = message
-        for key, value in sensitive_data.items():
-            if value and len(value) > 8:  # Only redact if value exists and is long enough
-                # Redact all but first 4 and last 4 characters
-                redacted_value = value[:4] + "*" * (len(value) - 8) + value[-4:]
-                redacted_message = redacted_message.replace(value, redacted_value)
-            elif value:
-                # For short values, redact completely
-                redacted_message = redacted_message.replace(value, "*" * len(value))
-    else:
-        redacted_message = message
-    
-    # Use the appropriate logging method
-    logger = logging.getLogger(__name__)
-    if level.lower() == "info":
-        logger.info(redacted_message)
-    elif level.lower() == "warning":
-        logger.warning(redacted_message)
-    elif level.lower() == "error":
-        logger.error(redacted_message)
-    elif level.lower() == "debug":
-        logger.debug(redacted_message)
+# Import secure logging from centralized module
+from secure_logging import ZeroSensitiveLogger, SafeLogContext
 
 
 class ConfigEncryption:
@@ -89,7 +58,11 @@ class ConfigEncryption:
             f = Fernet(key)
             return f.encrypt(json.dumps(secrets).encode())
         except Exception as e:
-            secure_log("error", f"Encryption failed: {e}")
+            self.logger.error("Encryption operation failed", SafeLogContext(
+                operation="encryption",
+                status="failed",
+                metadata={"error_type": type(e).__name__, "operation": "encrypt"}
+            ))
             raise
     
     def decrypt_secrets(self, encrypted_data: bytes, master_password: str) -> Dict[str, Any]:
@@ -100,7 +73,11 @@ class ConfigEncryption:
             decrypted = f.decrypt(encrypted_data)
             return json.loads(decrypted.decode())
         except Exception as e:
-            secure_log("error", f"Decryption failed: {e}")
+            self.logger.error("Decryption operation failed", SafeLogContext(
+                operation="decryption",
+                status="failed",
+                metadata={"error_type": type(e).__name__, "operation": "decrypt"}
+            ))
             raise
 
 
@@ -118,6 +95,9 @@ class ConfigManager:
         self.encryption = ConfigEncryption(self.config_dir)
         self._config_cache: Optional[Dict[str, Any]] = None
         self._secrets_cache: Optional[Dict[str, Any]] = None
+        
+        # Initialize zero-sensitive logger
+        self.logger = ZeroSensitiveLogger("config")
         
     def get_default_config(self) -> Dict[str, Any]:
         """Get default configuration structure."""
@@ -180,14 +160,20 @@ class ConfigManager:
             default_config = self.get_default_config()
             self.save_config(default_config)
             self._config_cache = default_config
+            self.logger.log_configuration("general", has_sensitive_data=False, status="created_default")
             return default_config
         
         try:
             with open(self.config_file, 'r') as f:
                 self._config_cache = json.load(f)
+                self.logger.log_configuration("general", has_sensitive_data=False, status="loaded")
                 return self._config_cache
         except Exception as e:
-            secure_log("error", f"Failed to load config: {e}")
+            self.logger.error("Configuration loading failed", SafeLogContext(
+                operation="config_load",
+                status="failed",
+                metadata={"error_type": type(e).__name__}
+            ))
             return self.get_default_config()
     
     def save_config(self, config: Dict[str, Any]) -> None:
@@ -197,7 +183,11 @@ class ConfigManager:
                 json.dump(config, f, indent=2)
             self._config_cache = config
         except Exception as e:
-            secure_log("error", f"Failed to save config: {e}")
+            self.logger.error("Configuration saving failed", SafeLogContext(
+                operation="config_save",
+                status="failed",
+                metadata={"error_type": type(e).__name__}
+            ))
             raise
     
     def load_secrets(self, master_password: Optional[str] = None) -> Dict[str, Any]:
@@ -234,7 +224,11 @@ class ConfigManager:
             self._secrets_cache = secrets
             return secrets
         except Exception as e:
-            secure_log("error", f"Failed to load encrypted secrets: {e}")
+            self.logger.error("Failed to load encrypted secrets", SafeLogContext(
+                operation="secrets_load",
+                status="failed",
+                metadata={"error_type": type(e).__name__, "storage_type": "encrypted"}
+            ))
             raise
     
     def _load_1password_secrets(self, master_password: Optional[str] = None) -> Dict[str, Any]:
@@ -295,7 +289,11 @@ class ConfigManager:
             return secrets
             
         except Exception as e:
-            secure_log("error", f"Failed to load 1Password secrets: {e}")
+            self.logger.error("Failed to load 1Password secrets", SafeLogContext(
+                operation="secrets_load",
+                status="failed",
+                metadata={"error_type": type(e).__name__, "storage_type": "1password"}
+            ))
             raise
     
     def _fetch_1password_secret(self, secret_reference: str) -> str:
@@ -353,9 +351,17 @@ class ConfigManager:
             with open(self.secrets_file, 'w') as f:
                 json.dump(references_only, f, indent=2)
                 
-            secure_log("info", "1Password references saved to secrets file")
+            self.logger.info("1Password references saved", SafeLogContext(
+                operation="secrets_save",
+                status="success",
+                metadata={"storage_type": "1password_refs"}
+            ))
         except Exception as e:
-            secure_log("error", f"Failed to save 1Password references: {e}")
+            self.logger.error("Failed to save 1Password references", SafeLogContext(
+                operation="secrets_save",
+                status="failed",
+                metadata={"error_type": type(e).__name__, "storage_type": "1password_refs"}
+            ))
             raise
     
     def get_api_keys(self, master_password: Optional[str] = None) -> Tuple[str, str]:
@@ -421,7 +427,11 @@ class ConfigManager:
             return False
             
         except Exception as e:
-            secure_log("error", f"Connection test failed: {e}")
+            self.logger.error("Connection test failed", SafeLogContext(
+                operation="connection_test",
+                status="failed",
+                metadata={"error_type": type(e).__name__, "endpoint": api_url}
+            ))
             return False
     
     def validate_config(self) -> Tuple[bool, list]:
@@ -457,6 +467,11 @@ class ConfigManager:
                 errors.append(f"Failed to validate secrets: {e}")
             
         except Exception as e:
+            self.logger.error("Configuration validation failed", SafeLogContext(
+                operation="config_validate",
+                status="failed",
+                metadata={"error_type": type(e).__name__}
+            ))
             errors.append(f"Configuration validation failed: {e}")
         
         return len(errors) == 0, errors
@@ -499,7 +514,11 @@ class ConfigManager:
             return True
             
         except Exception as e:
-            secure_log("error", f"Migration failed: {e}")
+            self.logger.error("Migration failed", SafeLogContext(
+                operation="migration",
+                status="failed",
+                metadata={"error_type": type(e).__name__, "source": "env_file"}
+            ))
             return False
     
     def export_config(self, export_path: str, include_secrets: bool = False, 
@@ -524,7 +543,11 @@ class ConfigManager:
             return True
             
         except Exception as e:
-            secure_log("error", f"Export failed: {e}")
+            self.logger.error("Export failed", SafeLogContext(
+                operation="config_export",
+                status="failed",
+                metadata={"error_type": type(e).__name__, "export_path": export_path}
+            ))
             return False
     
     def import_config(self, import_path: str, master_password: Optional[str] = None) -> bool:
@@ -545,5 +568,9 @@ class ConfigManager:
             return True
             
         except Exception as e:
-            secure_log("error", f"Import failed: {e}")
+            self.logger.error("Import failed", SafeLogContext(
+                operation="config_import",
+                status="failed",
+                metadata={"error_type": type(e).__name__, "import_path": import_path}
+            ))
             return False

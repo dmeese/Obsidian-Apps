@@ -14,39 +14,8 @@ from urllib.parse import quote, unquote
 import json
 import re
 
-# Add secure logging function
-def secure_log(level: str, message: str, sensitive_data: Dict[str, str] = None) -> None:
-    """
-    Secure logging function that redacts sensitive information.
-    
-    Args:
-        level: Log level (info, warning, error, debug)
-        message: Log message
-        sensitive_data: Dict of sensitive values to redact (e.g., {"api_key": "actual_key"})
-    """
-    if sensitive_data:
-        redacted_message = message
-        for key, value in sensitive_data.items():
-            if value and len(value) > 8:  # Only redact if value exists and is long enough
-                # Redact all but first 4 and last 4 characters
-                redacted_value = value[:4] + "*" * (len(value) - 8) + value[-4:]
-                redacted_message = redacted_message.replace(value, redacted_value)
-            elif value:
-                # For short values, redact completely
-                redacted_message = redacted_message.replace(value, "*" * len(value))
-    else:
-        redacted_message = message
-    
-    # Use the appropriate logging method
-    logger = logging.getLogger(__name__)
-    if level.lower() == "info":
-        logger.info(redacted_message)
-    elif level.lower() == "warning":
-        logger.warning(redacted_message)
-    elif level.lower() == "error":
-        logger.error(redacted_message)
-    elif level.lower() == "debug":
-        logger.debug(redacted_message)
+# Import secure logging from centralized module
+from secure_logging import secure_log
 
 
 @dataclass
