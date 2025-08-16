@@ -25,9 +25,7 @@ def main():
     # Set application style
     app.setStyle('Fusion')
     
-    # Enable high DPI scaling
-    app.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
-    app.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
+    # PyQt6 handles high DPI scaling automatically
     
     # Create and show the main window
     try:

@@ -133,11 +133,15 @@ class ObsidianToolsGUI(QMainWindow):
         self.setStatusBar(self.status_bar)
         
         # Status label
-        self.status_label = self.status_bar.addWidget("Ready")
+        from PyQt6.QtWidgets import QLabel
+        self.status_label = QLabel("Ready")
+        self.status_bar.addWidget(self.status_label)
         self.status_label.setStyleSheet("color: #475569; font-size: 12px;")
         
         # Progress bar (hidden by default)
-        self.progress_bar = self.status_bar.addWidget("")
+        from PyQt6.QtWidgets import QProgressBar
+        self.progress_bar = QProgressBar()
+        self.status_bar.addWidget(self.progress_bar)
         self.progress_bar.hide()
     
     def setup_connections(self):

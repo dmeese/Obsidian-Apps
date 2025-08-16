@@ -5,7 +5,7 @@ This module provides dependency injection and service management
 for the application.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from .config.manager import ConfigManager
 from .obsidian.client import ObsidianClient
 from .llm.gemini_client import GeminiClient
@@ -25,23 +25,41 @@ class ServiceContainer:
             config_manager = ConfigManager()
             self._services['config'] = config_manager
             
+            # Get configuration
+            config = config_manager.load_config()
+            
             # Obsidian client (depends on config)
-            obsidian_client = ObsidianClient(
-                config=config_manager.get_config()
-            )
+            obsidian_config = {
+                'obsidian': {
+                    'api_url': config.get('obsidian', {}).get('api_url', 'http://localhost:27123'),
+                    'timeout': config.get('obsidian', {}).get('timeout', 30),
+                    'api_key': ''  # Will be loaded from secrets
+                }
+            }
+            
+            # Try to load API keys
+            try:
+                secrets = config_manager.load_secrets()
+                obsidian_config['obsidian']['api_key'] = secrets.get('obsidian_api_key', '')
+                gemini_api_key = secrets.get('gemini_api_key', '')
+            except Exception:
+                # If secrets can't be loaded, services won't have API keys
+                obsidian_config['obsidian']['api_key'] = ''
+                gemini_api_key = ''
+            
+            obsidian_client = ObsidianClient(obsidian_config)
             self._services['obsidian'] = obsidian_client
             
             # LLM service (depends on config for API keys)
-            try:
-                secrets = config_manager.load_secrets()
-                gemini_api_key = secrets.get('gemini_api_key', '')
-                if gemini_api_key:
-                    llm_service = GeminiClient(api_key=gemini_api_key)
+            if gemini_api_key:
+                try:
+                    model = config.get('gemini', {}).get('default_model', 'gemini-2.5-flash')
+                    llm_service = GeminiClient(api_key=gemini_api_key, model=model)
                     self._services['llm'] = llm_service
-                else:
+                except Exception as e:
+                    print(f"Warning: Failed to initialize LLM service: {e}")
                     self._services['llm'] = None
-            except Exception:
-                # If secrets can't be loaded, LLM service won't be available
+            else:
                 self._services['llm'] = None
             
             # Analysis service (depends on obsidian client)
@@ -79,3 +97,31 @@ class ServiceContainer:
         """Reload all services (useful after configuration changes)."""
         self._services.clear()
         self._configure_services()
+    
+    def test_obsidian_connection(self) -> bool:
+        """Test connection to Obsidian API."""
+        obsidian_client = self.get_service('obsidian')
+        if obsidian_client:
+            return obsidian_client.test_connection()
+        return False
+    
+    def get_vault_info(self) -> Optional[Dict[str, Any]]:
+        """Get vault information from Obsidian."""
+        obsidian_client = self.get_service('obsidian')
+        if obsidian_client:
+            return obsidian_client.get_vault_info()
+        return None
+    
+    def get_vault_folders(self) -> List[str]:
+        """Get list of folders in the vault."""
+        obsidian_client = self.get_service('obsidian')
+        if obsidian_client:
+            return obsidian_client.get_folders()
+        return []
+    
+    def get_vault_notes(self, folder_path: str = "") -> List[Dict[str, Any]]:
+        """Get notes from the vault."""
+        obsidian_client = self.get_service('obsidian')
+        if obsidian_client:
+            return obsidian_client.get_notes(folder_path)
+        return []
